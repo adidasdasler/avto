@@ -130,6 +130,21 @@ def display_value(v: Any) -> str:
     return str(v)
 
 
+# Единицы для числовых полей и подпись для открытого конца периода.
+_UNITS = {"mileage": "км", "odometer": "км", "probeg": "км", "price": "₽", "amount": "₽", "sum": "₽",
+          "min": "₽", "max": "₽", "avg": "₽"}
+_OPEN_END = {"to", "dateto", "enddate", "exclusiondate"}
+
+
+def display_field(key: str, v: Any) -> str:
+    k = key.lower()
+    if v in (None, "") and k in _OPEN_END:
+        return "по настоящее время"
+    if k in _UNITS and to_int(v) is not None and not isinstance(v, bool):
+        return fmt_num(v, _UNITS[k])
+    return display_value(v)
+
+
 def flatten(record: dict[str, Any], skip: Iterable[str] = ()) -> list[tuple[str, str]]:
     skip_l = {s.lower() for s in skip}
-    return [(label(k), display_value(v)) for k, v in record.items() if k.lower() not in skip_l]
+    return [(label(k), display_field(k, v)) for k, v in record.items() if k.lower() not in skip_l]

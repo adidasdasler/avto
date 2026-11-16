@@ -7,6 +7,7 @@ testMode/billing). Поля внутри records — наше предполож
 """
 from __future__ import annotations
 
+import base64
 import copy
 from typing import Any
 
@@ -14,6 +15,20 @@ from .client import ProviderError, ProviderResponse, build_response
 from .methods import METHODS
 
 _VIN = "X7TEST00000000001"
+
+
+def _photo(bg: str, caption: str) -> str:
+    """Заглушка фото (SVG data-URI), чтобы офлайн-отчёт показывал картинки без сети."""
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450"><rect width="800" height="450" fill="{bg}"/>'
+        '<g fill="none" stroke="#5b6573" stroke-width="10" stroke-linejoin="round">'
+        '<path d="M150 300 L190 220 Q210 180 260 175 L540 175 Q590 180 620 220 L670 300 Z"/>'
+        '<circle cx="250" cy="310" r="42" fill="#5b6573"/><circle cx="570" cy="310" r="42" fill="#5b6573"/></g>'
+        '<rect x="345" y="270" width="110" height="34" rx="4" fill="#fff" stroke="#222" stroke-width="3"/>'
+        f'<text x="400" y="400" font-family="DejaVu Sans, sans-serif" font-size="26" text-anchor="middle" '
+        f'fill="#2c333d">{caption} · тестовые данные</text></svg>'
+    )
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
 
 SAMPLES: dict[str, dict[str, Any]] = {
     "decode": {"found": 1, "records": [{
@@ -70,8 +85,8 @@ SAMPLES: dict[str, dict[str, Any]] = {
     "pros-cons": {"found": 1, "records": [{"pros": ["Недорогое обслуживание", "Просторный салон"],
                                             "cons": ["Слабая шумоизоляция", "Вариатор/робот на части версий"]}]},
     "nomerogram": {"found": 2, "records": [
-        {"date": "2023-05-10", "url": "https://example.invalid/photo1.jpg", "source": "Номерограм"},
-        {"date": "2022-08-01", "url": "https://example.invalid/photo2.jpg", "source": "Номерограм"}]},
+        {"date": "2023-05-10", "url": _photo("#dfe8f3", "Т000ТТ00 · 10.05.2023"), "source": "Номерограм"},
+        {"date": "2022-08-01", "url": _photo("#efe6d8", "Т000ТТ00 · 01.08.2022"), "source": "Номерограм"}]},
     "sharing": {"found": 0, "records": []},
     "service": {"found": 1, "records": [{"date": "2021-02-01", "mileage": 60000, "dealer": "Тест-Авто",
                                           "works": "ТО-4"}]},
