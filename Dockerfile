@@ -7,6 +7,7 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY shturman ./shturman
 COPY landing ./landing
+COPY scripts ./scripts
 RUN pip install --no-cache-dir .
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
