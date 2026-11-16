@@ -18,7 +18,7 @@ from .identifiers import Identifier
 from .provider import Provider, ProviderError, ProviderResponse, call_accidents_rt
 from .provider.methods import BODY_ALIASES, METHODS
 from .redaction import redact
-from .rules import Flag, evaluate, overall
+from .rules import build_flags, dig, overall
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +26,8 @@ TIERS = ("express", "basic", "dossier", "dossier_plus")
 TIER_TITLES = {"express": "Экспресс", "basic": "Базовый", "dossier": "Досье", "dossier_plus": "Досье+"}
 
 _EXPRESS = ["decode", "pledge", "taxi", "elpts", "accidents"]
-_BASIC = _EXPRESS + ["score", "brief", "probeg", "price", "fines"]
+# vin2gos даёт госномер и СТС (нужен для штрафов), если пользователь ввёл VIN
+_BASIC = _EXPRESS + ["vin2gos", "score", "brief", "autopark", "probeg", "price", "fines"]
 _DOSSIER = _BASIC + ["vin", "osago-history", "offers", "plate-history", "pros-cons", "nomerogram",
                      "recalls", "customs", "lizing", "lawsuits", "sharing"]
 _DOSSIER_PLUS = _DOSSIER + ["accidents-rt", "service"]
@@ -42,6 +43,7 @@ ERROR_TEXTS = {
     "TOKEN_INVALID": "не настроен доступ к провайдеру",
     "NETWORK": "источник временно недоступен",
     "TIMEOUT": "источник не ответил вовремя",
+    "PROVIDER_ERROR": "источник временно недоступен",
 }
 
 
@@ -55,7 +57,7 @@ class CascadeResult:
     plate: str | None
     vehicle: dict[str, Any]
     sections: dict[str, dict[str, Any]]
-    flags: list[Flag]
+    flags: list[dict[str, Any]]
     overall: str
     cost: float = 0.0
     errors: list[str] = field(default_factory=list)
@@ -66,30 +68,63 @@ def _cache_key(method: str, params: dict[str, str]) -> str:
     return f"{method}:{hashlib.sha1(raw.encode()).hexdigest()}"
 
 
+BODY_TYPES = {"SDN": "Седан", "HBK": "Хэтчбек", "WGN": "Универсал", "SUV": "Внедорожник", "CPE": "Купе",
+              "MPV": "Минивэн", "CAB": "Кабриолет", "LBK": "Лифтбек", "PKP": "Пикап", "VAN": "Фургон"}
+
+
+def _sts(v: Any) -> str | None:
+    if isinstance(v, dict):
+        if v.get("num"):
+            return str(v["num"])
+        joined = f"{v.get('series') or ''}{v.get('number') or ''}"
+        return joined or None
+    return str(v) if v else None
+
+
 def vehicle_summary(sections: dict[str, dict[str, Any]], vin: str | None, plate: str | None) -> dict[str, Any]:
-    src: dict[str, Any] = {}
-    for m in ("gos2vin", "decode", "brief"):  # brief самый полный — последним
-        d = (sections.get(m) or {}).get("data")
-        if d:
-            src.update({k: v for k, v in n.first_record(d).items() if v not in (None, "")})
-    brand = n.pick(src, "brand", "marka", "make", "mark")
-    model = n.pick(src, "model")
+    """Техданные из decode / gos2vin / vin2gos / vin / score / brief / autopark (реальная схема avtovincod.ru)."""
+    data = lambda m: (sections.get(m) or {}).get("data") or {}  # noqa: E731
+    dec = dig(data("decode"), "variants.0") or {}
+    g = data("gos2vin") or data("vin2gos")
+    if not g.get("vin"):
+        g = data("vin2gos") or g
+    rec = dig(data("vin"), "record") or dig(data("score"), "record") or {}
+    score_rec = dig(data("score"), "record") or {}
+    br = data("brief").get("response") or {}
+    ap = data("autopark")
+
+    def first(*vals: Any) -> Any:
+        for v in vals:
+            if v not in (None, "", [], {}):
+                return v
+        return None
+
+    brand = first(dec.get("brand"), g.get("brand"), ap.get("brand"))
+    model = first(dec.get("model"), g.get("model"), ap.get("model"))
+    title = " ".join(str(x) for x in (brand, model) if x) or first(rec.get("model"), br.get("mark_model")) or "Автомобиль"
+    reg = first(plate, g.get("licensePlate"), rec.get("regNumber"))
+    trans = dec.get("transmission") or {}
     return {
-        "brand": brand, "model": model,
-        "title": " ".join(str(x) for x in (brand, model) if x) or "Автомобиль",
-        "year": n.to_int(n.pick(src, "year", "releaseYear", "yearOfManufacture")),
-        "color": n.pick(src, "color", "colour"),
-        "vin": vin or n.pick(src, "vin"),
-        "plate": plate or n.pick(src, "plate", "gosNumber", "regNumber"),
-        "body": n.pick(src, "body", "bodyNumber"),
-        "chassis": n.pick(src, "chassis", "chassisNumber"),
-        "engine_number": n.pick(src, "engineNumber", "engine"),
-        "engine_volume": n.pick(src, "engineVolume", "volume"),
-        "power_hp": n.pick(src, "powerHp", "power", "hp"),
-        "power_kw": n.pick(src, "powerKw", "kw"),
-        "vehicle_type": n.pick(src, "vehicleType", "bodyType", "type"),
-        "category": n.pick(src, "category"),
-        "sts": n.pick(src, "sts", "stsNumber"),
+        "brand": brand, "model": model, "title": title,
+        "modification": dec.get("title"),
+        "year": n.to_int(first(dig(dec, "years.model"), g.get("year"), rec.get("year"), br.get("year"))),
+        "color": (str(rec.get("color") or score_rec.get("color") or "").capitalize() or None),
+        "vin": first(vin, g.get("vin"), rec.get("vin"), br.get("vin")),
+        "plate": reg if reg and "*" not in str(reg) else None,
+        "body": first(rec.get("bodyNumber"), g.get("bodyNumber")),
+        "chassis": first(g.get("chassisNumber")),
+        "engine_number": first(ap.get("engineNumber"), dig(ap, "records.0.engineNumber")),
+        "engine_volume": n.to_int(first(dig(dec, "engine.volumeCcm"), rec.get("engineVolume"), score_rec.get("engineVolume"))),
+        "power_hp": n.to_int(first(dig(dec, "engine.powerPs"), g.get("enginePower"), rec.get("powerHp"))),
+        "power_kw": n.to_int(first(dig(dec, "engine.powerKw"), score_rec.get("powerKwt"))),
+        "fuel": first(dig(dec, "engine.fuelText"), br.get("engine_type")),
+        "transmission": " ".join(str(x) for x in (trans.get("text"), trans.get("name") and f"({trans['name']})") if x) or None,
+        "drive": {"FWD": "передний", "RWD": "задний", "AWD": "полный", "4WD": "полный"}.get(dec.get("drive"), dec.get("drive")),
+        "vehicle_type": BODY_TYPES.get(dec.get("body"), dec.get("body")),
+        "category": first(rec.get("category"), score_rec.get("category"), g.get("vehicleCode")),
+        "assembly": ", ".join(x for x in (dig(dec, "assembly.country"), dig(dec, "assembly.city")) if x) or None,
+        "sts": first(_sts(g.get("sts")), _sts(rec.get("sts"))),
+        "pts": _sts(rec.get("pts")),
     }
 
 
@@ -109,6 +144,7 @@ class Cascade:
                 return {"data": entry.payload, "cached": True}
 
         error: str | None = None
+        error_msg = ""
         resp: ProviderResponse | None = None
         try:
             if method == "accidents-rt":
@@ -116,12 +152,13 @@ class Cascade:
             else:
                 resp = await self.provider.call(method, **params)
         except ProviderError as e:
-            error = e.code
+            error, error_msg = e.code, e.message
             log.warning("provider %s failed: %s", method, e)
 
         async with self.db.session() as s:
             s.add(ProviderLog(check_id=check_id, method=method, charged=resp.charged if resp else 0,
-                              test_mode=resp.test_mode if resp else False, error=error))
+                              test_mode=resp.test_mode if resp else False,
+                              error=f"{error}: {error_msg}" if error else None))
             if resp is not None:
                 clean = redact({k: v for k, v in resp.data.items() if k != "billing"})
                 ttl = METHODS[method].cache_ttl_hours
@@ -157,11 +194,13 @@ class Cascade:
         if method == "customs":
             return None if vin and vin[0] not in "XZ" else "автомобиль отечественной сборки"
         if method == "lizing":
-            legal_owner = any("юрид" in str(n.pick(r, "ownerType", default="")).lower()
-                              for r in n.records(data("vin")))
+            rec = dig(data("vin"), "record") or dig(data("score"), "record") or {}
+            legal_owner = any("юрид" in str(p.get("personType", "")).lower()
+                              for p in rec.get("ownershipPeriods") or [])
             return None if legal_owner or (age is not None and age <= 7) else "нет признаков лизинга"
         if method == "lawsuits":
-            risky = n.count(data("pledge")) or n.count(data("score"))
+            risky = (dig(data("pledge"), "active_count") or dig(data("score"), "status.restricted")
+                     or dig(data("score"), "restrictions"))
             return None if risky else "нет залогов и ограничений"
         if method == "sharing":
             return None if age is None or age <= 6 else "возраст авто больше 6 лет"
@@ -209,11 +248,13 @@ class Cascade:
 
         # Повторяем только то, чего ещё нет или что упало с ошибкой.
         todo = [m for m in TIER_METHODS[tier] if m not in sections or "error" in sections[m]]
+        if ident.kind == "plate":  # госномер и СТС уже пришли из gos2vin
+            todo = [m for m in todo if m != "vin2gos"]
         cost += await self._run_wave([m for m in todo if m not in GATED], ident_params, sections, check_id)
 
         vehicle = vehicle_summary(sections, vin, plate)
         if vehicle.get("sts"):
-            # Штрафы ищутся по СТС, его отдаёт /brief.
+            # Штрафы ищутся по СТС, его отдают gos2vin / vin2gos.
             ident_params = {**ident_params, "sts": str(vehicle["sts"])}
         gated_run = []
         for m in (m for m in todo if m in GATED):
@@ -224,18 +265,6 @@ class Cascade:
                 gated_run.append(m)
         cost += await self._run_wave(gated_run, ident_params, sections, check_id)
 
-        flags = build_flags(sections, tier)
+        flags = build_flags(sections)
         return CascadeResult(vin=vin, plate=plate or vehicle.get("plate"), vehicle=vehicle,
                              sections=sections, flags=flags, overall=overall(flags), cost=cost)
-
-
-def build_flags(sections: dict[str, dict[str, Any]], tier: str) -> list[Flag]:
-    flags = []
-    for m in TIER_METHODS[tier]:
-        if m in ("decode", "brief"):
-            continue
-        sec = sections.get(m)
-        if not sec or "skipped" in sec:
-            continue
-        flags.append(evaluate(m, sec.get("data"), sec.get("error")))
-    return flags

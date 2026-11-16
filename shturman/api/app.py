@@ -16,6 +16,7 @@ from ..config import Settings, get_settings
 from ..db import Database
 from ..identifiers import IdentifierError
 from ..provider import Provider, make_provider
+from ..rules import traffic_light
 from ..services import CheckService, LimitExceeded
 
 LANDING_DIR = Path(__file__).resolve().parents[2] / "landing"
@@ -78,6 +79,7 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
             raise HTTPException(429, str(e))
         return {
             "id": c.id, "vehicle": c.vehicle, "overall": c.overall, "flags": c.flags,
+            "light": traffic_light(c.flags or []),
             "report_url": f"/r/{c.id}", "buy_url": s.bot_link(c.id),
             "free_left": await s.free_left(client_ip=client_ip(request)),
             "offers": [{"code": p.code, "title": p.title, "price": p.price, "description": p.description}

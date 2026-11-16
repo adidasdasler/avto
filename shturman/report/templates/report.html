@@ -5,134 +5,152 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ vehicle.title }} — отчёт {{ brand }}</title>
 <style>
-  @page { size: A4; margin: 14mm 12mm 20mm;
-    @bottom-left { content: "Страница " counter(page) " из " counter(pages) "  •  {{ vehicle.title }} • {{ generated }} • {{ vehicle.vin or '' }}"; font-size: 8pt; color: #777; font-family: "DejaVu Sans", sans-serif; }
-    @bottom-right { content: "{{ brand }}"; font-size: 8pt; color: #777; font-family: "DejaVu Sans", sans-serif; } }
-  :root { --ok:#1f9d55; --bad:#d64545; --warn:#e08a00; --info:#3b6ea8; --muted:#666; --soft:#f1f1f1; }
+  @page { size: A4; margin: 14mm 12mm 18mm;
+    @bottom-left { content: "Страница " counter(page) " из " counter(pages) "  •  {{ vehicle.title }} • {{ generated }} • {{ vehicle.vin or '' }}"; font: 8pt "DejaVu Sans", sans-serif; color: #777; }
+    @bottom-right { content: "{{ brand }}"; font: 8pt "DejaVu Sans", sans-serif; color: #777; } }
+  :root { --red:#d64545; --yellow:#d08a00; --green:#1f9d55; --info:#3b6ea8; --muted:#666; --soft:#f1f1f1; --line:#ddd; }
   * { box-sizing: border-box; }
-  body { font-family: "DejaVu Sans", "Segoe UI", Arial, sans-serif; color:#111; margin:0; font-size: 10.5pt; background:#fff; }
+  body { font-family: "DejaVu Sans", "Segoe UI", Arial, sans-serif; color:#111; margin:0; font-size:10pt; background:#fff; }
   .wrap { max-width: 860px; margin: 0 auto; padding: 16px; }
-  header.top { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #111; padding-bottom:10px; }
-  header.top .logo { font-weight:800; font-size:15pt; }
-  header.top h1 { margin: 4px 0; font-size: 17pt; }
+  a { color: var(--info); }
   .muted { color: var(--muted); }
-  .badge { display:inline-block; padding:3px 10px; border-radius:12px; font-weight:700; font-size:9pt; color:#fff; }
-  .badge.ok{background:var(--ok)} .badge.bad{background:var(--bad)} .badge.warn{background:var(--warn)}
-  .summary { display:grid; grid-template-columns: 1fr 1fr; gap: 6px 28px; margin: 18px 0; }
-  .flag .t { font-weight:700; } .flag .s { padding-left: 18px; }
-  .flag.ok .t{color:var(--ok)} .flag.bad .t{color:var(--bad)} .flag.warn .t{color:var(--warn)}
-  .flag.info .t{color:var(--info)} .flag.na .t{color:var(--muted)}
-  section { margin-top: 18px; break-inside: auto; }
-  section h2 { background: var(--soft); border-radius: 8px; padding: 10px 14px; font-size: 13pt; margin: 0 0 10px; break-after: avoid; }
-  .grid3 { display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px 16px; }
-  .grid2 { display:grid; grid-template-columns: repeat(2, 1fr); gap: 8px 16px; }
-  .kv b { display:block; font-size: 9.5pt; } .kv span { font-size: 9.5pt; }
-  .note { border-radius: 14px; padding: 7px 14px; margin: 6px 0; display:inline-block; }
-  .note.ok { background:#e2f3e8; } .note.bad { background:#fdecea; color:#a32020; } .note.warn{background:#fff2dc} .note.info { background:#e6eef7; }
-  .rec { border-top: 1px solid #ddd; padding: 10px 2px; break-inside: avoid; }
-  table.t { width:100%; border-collapse: collapse; } table.t td, table.t th { text-align:left; padding:7px 4px; border-bottom:1px solid #ddd; }
+  header.top { border-bottom:2px solid #111; padding-bottom:10px; }
+  header.top .logo { font-weight:800; font-size:14pt; }
+  header.top h1 { margin: 4px 0; font-size: 16pt; }
+
+  /* ---- светофор ---- */
+  .light { display:flex; gap:20px; align-items:center; margin:16px 0 8px; padding:16px; border-radius:14px; break-inside: avoid; }
+  .light.red { background:#fdecec; } .light.yellow { background:#fff4dc; } .light.green { background:#e3f4ea; }
+  .lamp { background:#23262b; border-radius:16px; padding:8px; display:flex; flex-direction:column; gap:7px; flex:none; }
+  .lamp i { display:block; width:30px; height:30px; border-radius:50%; opacity:.18; }
+  .lamp i.r { background:var(--red); } .lamp i.y { background:#f2b600; } .lamp i.g { background:#2ec26a; }
+  .lamp i.on { opacity:1; }
+  .verdict { flex:1; }
+  .verdict b { display:block; font-size:15pt; line-height:1.2; }
+  .light.red .verdict b { color:#a32020; } .light.yellow .verdict b { color:#8a5a00; } .light.green .verdict b { color:#16743e; }
+  .score { text-align:center; flex:none; }
+  .score .num { font-size:26pt; font-weight:800; line-height:1; }
+  .score .of { font-size:8.5pt; color:var(--muted); }
+  .buckets { display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 10px 0 4px; break-inside: avoid; }
+  .bucket h3 { font-size:10pt; margin:0 0 6px; padding-bottom:4px; border-bottom:3px solid; }
+  .bucket.red h3 { border-color:var(--red); color:var(--red); }
+  .bucket.yellow h3 { border-color:var(--yellow); color:var(--yellow); }
+  .bucket.green h3 { border-color:var(--green); color:var(--green); }
+  .bucket div { margin-bottom:6px; font-size:9pt; } .bucket div b { display:block; font-size:9.5pt; }
+  .na-line { font-size:8.5pt; color:var(--muted); margin-top:4px; }
+
+  section { margin-top: 16px; }
+  section h2 { display:flex; justify-content:space-between; align-items:center; background: var(--soft); border-radius: 8px; padding: 9px 14px; font-size: 12.5pt; margin: 0 0 8px; break-after: avoid; }
+  .pill { font-size:8.5pt; font-weight:700; padding:2px 9px; border-radius:10px; color:#fff; white-space:nowrap; }
+  .pill.bad{background:var(--red)} .pill.warn{background:var(--yellow)} .pill.ok{background:var(--green)} .pill.info{background:var(--info)} .pill.na{background:#999}
+  .note { border-radius: 12px; padding: 7px 12px; margin: 4px 0 8px; }
+  .note.ok { background:#e2f3e8; } .note.bad { background:#fdecea; color:#a32020; } .note.warn{background:#fff2dc; color:#7a4f00} .note.info, .note.na { background:#e9eef5; }
+  .grid2 { display:grid; grid-template-columns: repeat(2, 1fr); gap: 6px 16px; }
+  .grid3 { display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px 16px; }
+  .kv b { display:block; font-size: 8.5pt; color:#333; } .kv span { font-size: 9.5pt; }
+  .rec { border-top: 1px solid var(--line); padding: 8px 2px; break-inside: avoid; }
+  table.t { width:100%; border-collapse: collapse; font-size:9pt; }
+  table.t td, table.t th { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); vertical-align: top; }
+  table.t th { font-size:8.5pt; color:#333; }
   .chart { width:100%; height:auto; }
-  .photos img { width: 100%; max-height: 360px; object-fit: cover; border-radius: 6px; margin-bottom: 8px; }
+  .photos { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .photos img { width: 100%; height: 190px; object-fit: cover; border-radius: 6px; background:#eee; }
+  ul.pc { margin: 4px 0; padding-left: 18px; }
   .locked li { color: var(--muted); }
-  .cta { margin: 20px 0; padding: 14px; border: 2px dashed #bbb; border-radius: 10px; }
-  .cta a { font-weight: 700; }
-  ul.pc { margin: 4px 0; }
-  @media (max-width: 600px) { .summary, .grid3, .grid2 { grid-template-columns: 1fr; } }
+  .cta { margin: 14px 0; padding: 12px; border: 2px dashed #bbb; border-radius: 10px; }
+  @media (max-width: 600px) { .grid2, .grid3, .buckets, .photos { grid-template-columns: 1fr; } .light { flex-wrap: wrap; } }
   @media print { .noprint { display:none; } }
 </style>
 </head>
 <body>
 <div class="wrap">
 <header class="top">
-  <div>
-    <div class="logo">{{ brand }}</div>
-    <h1>Отчёт по {{ query_label }}: {{ check.query if check.kind != 'vin' else vehicle.vin }}</h1>
-    <div class="muted">{{ vehicle.title }}{% if vehicle.year %}, {{ vehicle.year }}{% endif %} • Тариф «{{ tier_title }}» • Сформирован {{ generated }}</div>
-  </div>
-  <div><span class="badge {{ check.overall }}">{{ {'ok':'Без проблем','warn':'Есть замечания','bad':'Есть риски'}[check.overall] }}</span></div>
+  <div class="logo">{{ brand }}</div>
+  <h1>Отчёт по {{ query_label }}: {{ vehicle.vin if check.kind == 'vin' else check.query }}</h1>
+  <div class="muted">{{ vehicle.title }}{% if vehicle.year %}, {{ vehicle.year }}{% endif %} • Тариф «{{ tier_title }}» • Сформирован {{ generated }}</div>
 </header>
 
-<div class="summary">
-  {% for f in flags %}
-  <div class="flag {{ f.status }}"><div class="t">{{ icons[f.status] }} {{ f.title }}</div><div class="s">{{ f.summary }}</div></div>
+{% set L = light %}
+<div class="light {{ L.color }}">
+  <div class="lamp"><i class="r {{ 'on' if L.color == 'red' }}"></i><i class="y {{ 'on' if L.color == 'yellow' }}"></i><i class="g {{ 'on' if L.color == 'green' }}"></i></div>
+  <div class="verdict">
+    <b>{{ L.verdict }}</b>
+    <span class="muted">Проверено источников: {{ L.checked }}{% if tier != 'dossier_plus' %} — это отчёт «{{ tier_title }}», часть проверок доступна в полном отчёте{% endif %}.</span>
+  </div>
+  <div class="score"><div class="num">{{ L.score }}</div><div class="of">из 100</div></div>
+</div>
+<div class="buckets">
+  {% for cls, title, items in [('red', 'Критично', L.red), ('yellow', 'Внимание', L.yellow), ('green', 'В порядке', L.green)] %}
+  <div class="bucket {{ cls }}"><h3>{{ title }} · {{ items|length }}</h3>
+    {% for f in items %}<div><b>{{ f.title }}</b>{{ f.summary }}</div>{% else %}<div class="muted">—</div>{% endfor %}
+  </div>
   {% endfor %}
 </div>
+{% if L.na %}<div class="na-line">Нет данных: {% for f in L.na %}{{ f.title }} ({{ f.summary }}){{ ', ' if not loop.last }}{% endfor %}.</div>{% endif %}
 
 <section>
   <h2>Техническая информация</h2>
   <div class="grid3">
-    {% for label, val in [('Модель', vehicle.title), ('Год', vehicle.year), ('Цвет', vehicle.color),
-       ('Госномер', vehicle.plate), ('VIN-код', vehicle.vin), ('Номер кузова', vehicle.body),
-       ('Двигатель', vehicle.engine_number), ('Объём', (vehicle.engine_volume ~ ' см³') if vehicle.engine_volume else None),
-       ('Мощность', ((vehicle.power_hp|string) ~ ' л. с.' ~ ((' / ' ~ vehicle.power_kw ~ ' кВт') if vehicle.power_kw else '')) if vehicle.power_hp else None),
-       ('Шасси', vehicle.chassis), ('Тип автомобиля', vehicle.vehicle_type), ('Категория', vehicle.category)] %}
-    <div class="kv"><b>{{ label }}:</b><span>{{ val if val else 'нет данных' }}</span></div>
-    {% endfor %}
+    {% for label, val in tech %}<div class="kv"><b>{{ label }}:</b><span>{{ val }}</span></div>{% endfor %}
   </div>
 </section>
 
+{% set pills = {'bad': '✖ риск', 'warn': '! внимание', 'ok': '✔ в порядке', 'info': 'i сведения', 'na': 'нет данных'} %}
 {% for s in sections %}
 <section>
-  <h2>{{ s.title }}</h2>
-  {% if s.error %}
-    <div class="note info">Не удалось получить данные: {{ s.error }}</div>
-  {% elif s.kind == 'pts' %}
-    {% if s.has_epts %}<div class="note ok">✔ Найден электронный ПТС</div>
-    {% else %}<div class="note bad">✖ Транспортное средство не имеет электронного ПТС</div>
-      {% if s.paper %}<div class="kv"><b>Данные о бумажном ПТС:</b><span>{{ s.paper }}</span></div>{% endif %}{% endif %}
-    {% for row in s.rows %}<div class="rec grid2">{% for k, v in row %}<div class="kv"><b>{{ k }}:</b><span>{{ v }}</span></div>{% endfor %}</div>{% endfor %}
-  {% elif s.kind == 'owners' %}
-    <div class="note info">Количество владельцев: {{ s.owners|length }}</div>
-    {% for o in s.owners %}
-    <div class="rec"><b>{{ loop.index }}-й владелец{% if o.owner_type %} ({{ o.owner_type|lower }}){% endif %}</b><br>{{ o.from }} — {{ o.to }}<br><span class="muted">{{ o.operation }}</span></div>
-    {% endfor %}
-  {% elif s.kind == 'mileage' %}
-    {% if s.rollback %}<div class="note bad">✖ Пробег уменьшался между записями — возможна скрутка</div>{% endif %}
-    {{ s.chart }}
-    <table class="t"><tr><th>Дата</th><th>Пробег</th><th>Источник</th></tr>
-      {% for r in s.rows|reverse %}<tr><td>{{ r.date }}</td><td><b>{{ r.mileage }}</b></td><td class="muted">{{ r.type }}</td></tr>{% endfor %}</table>
-  {% elif s.kind == 'pledge' %}
-    {% if s.active %}<div class="note bad">● В ЗАЛОГЕ — автомобиль находится в залоге!</div>
-    {% else %}<div class="note ok">✔ Не находится в залоге</div>{% endif %}
-    {% for row in s.rows %}<div class="rec grid2">{% for k, v in row %}<div class="kv"><b>{{ k }}:</b><span>{{ v }}</span></div>{% endfor %}</div>{% endfor %}
-  {% elif s.kind == 'fines' %}
-    {% if s.unpaid %}<div class="note bad">Неоплаченных штрафов: {{ s.unpaid }} на {{ n.fmt_num(s.total_unpaid, '₽') }}</div>
-    {% else %}<div class="note ok">✔ Неоплаченных штрафов нет</div>{% endif %}
-    {% for row in s.rows %}<div class="rec grid2">{% for k, v in row %}<div class="kv"><b>{{ k }}:</b><span>{{ v }}</span></div>{% endfor %}</div>{% endfor %}
-  {% elif s.kind == 'price' %}
-    <div class="grid3"><div class="kv"><b>Минимум:</b><span>{{ s.min }}</span></div><div class="kv"><b>Средняя:</b><span>{{ s.avg }}</span></div><div class="kv"><b>Максимум:</b><span>{{ s.max }}</span></div></div>
-  {% elif s.kind == 'proscons' %}
-    <div class="grid2"><div><b>Плюсы</b><ul class="pc">{% for p in s.pros %}<li>{{ p }}</li>{% endfor %}</ul></div>
-      <div><b>Минусы</b><ul class="pc">{% for p in s.cons %}<li>{{ p }}</li>{% endfor %}</ul></div></div>
-  {% elif s.kind == 'photos' %}
-    {% if s.photos %}<div class="photos">{% for p in s.photos %}<img src="{{ p.url }}" alt="Фото {{ loop.index }}"><div class="muted">{{ p.date }} {{ p.source }}</div>{% endfor %}</div>
-    {% else %}<div class="note info">Фотографии не найдены</div>{% endif %}
+  <h2><span>{{ s.title }}</span><span class="pill {{ s.status }}">{{ pills[s.status] }}</span></h2>
+  {% if s.status == 'na' %}
+    <div class="note na">Не удалось получить данные: {{ s.summary }}.</div>
   {% else %}
-    {% if s.count == 0 %}
-      <div class="note ok">✔ Записей не найдено</div>
-    {% else %}
-      <div class="note {{ 'bad' if s.kind in ('accidents','restrictions') else 'info' }}">Найдено: {{ records_word(s.count) }}</div>
+    {% if s.key == 'elpts' and vehicle.pts %}<div class="kv" style="margin-bottom:6px"><b>Бумажный ПТС:</b><span>{{ vehicle.pts }}</span></div>{% endif %}
+    <div class="note {{ s.status }}">{{ s.note or (s.summary[:1]|upper ~ s.summary[1:]) }}</div>
+
+    {% if s.kind == 'cards' %}
       {% for row in s.rows %}<div class="rec grid2">{% for k, v in row %}<div class="kv"><b>{{ k }}:</b><span>{{ v }}</span></div>{% endfor %}</div>{% endfor %}
+
+    {% elif s.kind in ('table', 'mileage') %}
+      {% if s.kind == 'mileage' %}{{ s.extra.chart }}{% endif %}
+      {% if s.rows %}
+      <table class="t"><tr>{% for c in s.columns %}<th>{{ c }}</th>{% endfor %}</tr>
+        {% for row in s.rows %}<tr>{% for cell in row %}<td>{% if cell is string and cell.startswith('http') %}<a href="{{ cell }}">открыть</a>{% else %}{{ cell }}{% endif %}</td>{% endfor %}</tr>{% endfor %}
+      </table>
+      {% endif %}
+
+    {% elif s.kind == 'proscons' %}
+      {% if s.extra.model %}<div class="muted" style="margin-bottom:6px">{{ s.extra.model }}</div>{% endif %}
+      <div class="grid2">
+        <div><b>Плюсы</b><ul class="pc">{% for p in s.extra.pros %}<li>{{ p }}</li>{% endfor %}</ul></div>
+        <div><b>Минусы</b><ul class="pc">{% for p in s.extra.cons %}<li>{{ p }}</li>{% endfor %}</ul></div>
+      </div>
+      {% for k, v in s.extra.facts %}<div class="kv" style="margin-top:6px"><b>{{ k }}:</b><span>{{ v }}</span></div>{% endfor %}
+
+    {% elif s.kind == 'price' %}
+      <div class="grid3"><div class="kv"><b>Минимум:</b><span>{{ s.extra.min }}</span></div><div class="kv"><b>Средняя:</b><span>{{ s.extra.avg }}</span></div><div class="kv"><b>Максимум:</b><span>{{ s.extra.max }}</span></div></div>
+      {% if s.extra.count %}<div class="muted" style="margin-top:4px">По {{ s.extra.count }} объявлениям о продаже аналогичных автомобилей.</div>{% endif %}
+      {% if s.extra.by_year %}<table class="t" style="margin-top:6px"><tr><th>Год</th><th>Средняя цена</th></tr>{% for y, v in s.extra.by_year %}<tr><td>{{ y }}</td><td>{{ v }}</td></tr>{% endfor %}</table>{% endif %}
+
+    {% elif s.kind == 'photos' %}
+      <div class="photos">{% for url in s.extra.photos %}<img src="{{ url }}" alt="Фото {{ loop.index }}">{% endfor %}</div>
     {% endif %}
   {% endif %}
 </section>
 {% endfor %}
 
 {% if skipped %}
-<section><h2>Не проверялось</h2>
+<section><h2><span>Не проверялось</span></h2>
   <ul>{% for t, why in skipped %}<li>{{ t }} — {{ why }}</li>{% endfor %}</ul>
 </section>
 {% endif %}
 
 {% if locked %}
-<section class="locked"><h2>Доступно в полном отчёте</h2>
-  <ul>{% for t, tier in locked %}<li>🔒 {{ t }} <span class="muted">— тариф «{{ tier }}»</span></li>{% endfor %}</ul>
+<section class="locked"><h2><span>Доступно в полном отчёте</span></h2>
+  <ul>{% for t, tier_name in locked %}<li>🔒 {{ t }} <span class="muted">— тариф «{{ tier_name }}»</span></li>{% endfor %}</ul>
   {% if bot_link %}<div class="cta noprint">Получить полный отчёт: <a href="{{ bot_link }}">открыть в Telegram</a></div>{% endif %}
 </section>
 {% endif %}
 
-<p class="muted" style="margin-top:24px;font-size:8.5pt">Отчёт сформирован по данным открытых и коммерческих источников на дату формирования. Персональные данные третьих лиц скрыты.
-Ссылка на отчёт: {{ report_url }}</p>
+<p class="muted" style="margin-top:20px;font-size:8pt">Светофор: красный — юридические риски (залог, розыск, ограничения, действующий лизинг, скрутка пробега); жёлтый — замечания (такси, ДТП, штрафы, каршеринг, суды, отзывные кампании); зелёный — рисков не найдено. Балл: 100 минус штраф за каждый найденный риск.
+Отчёт сформирован по данным открытых и коммерческих источников на дату формирования. Персональные данные третьих лиц скрыты. Ссылка на отчёт: {{ report_url }}</p>
 </div>
 </body>
 </html>

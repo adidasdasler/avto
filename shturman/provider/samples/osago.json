@@ -1,0 +1,36 @@
+{
+  "success": 1,
+  "query": {
+    "vin": "X7TEST00000000001"
+  },
+  "found": 1,
+  "policies": [
+    {
+      "companyName": "ТЕСТОВАЯ СТРАХОВАЯ КОМПАНИЯ",
+      "policySerial": "ТТТ",
+      "policyNumber": "0000000000",
+      "vin": "X7TEST00000000001",
+      "vin_mask": null,
+      "bodyNumber": null,
+      "bodyNumber_mask": null,
+      "chassisNumber": null,
+      "chassisNumber_mask": null,
+      "licensePlate": "Т000ТТ00",
+      "licensePlate_mask": null,
+      "regNumber": "Т000ТТ00",
+      "regNumber_mask": null,
+      "markmodel": "LADA VESTA",
+      "status": "Действует",
+      "startDate": "2026-04-01",
+      "endDate": "2027-03-31"
+    }
+  ],
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

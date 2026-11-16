@@ -30,6 +30,12 @@
   .flags { display:grid; grid-template-columns:1fr 1fr; gap:8px 20px; margin:14px 0; }
   .flag b { display:block; } .flag.ok b{color:var(--ok)} .flag.bad b{color:var(--bad)} .flag.warn b{color:var(--warn)} .flag.info b{color:var(--info)} .flag.na b{color:var(--muted)}
   .err { color:var(--bad); }
+  .light { display:flex; gap:14px; align-items:center; padding:14px; border-radius:12px; margin:10px 0 4px; }
+  .light.red { background:color-mix(in srgb, var(--bad) 14%, transparent); } .light.yellow { background:color-mix(in srgb, var(--warn) 16%, transparent); } .light.green { background:color-mix(in srgb, var(--ok) 14%, transparent); }
+  .lamp { background:#23262b; border-radius:12px; padding:6px; display:flex; flex-direction:column; gap:5px; flex:none; }
+  .lamp i { width:20px; height:20px; border-radius:50%; opacity:.2; display:block; }
+  .lamp .r { background:#e04848; } .lamp .y { background:#f2b600; } .lamp .g { background:#2ec26a; } .lamp .on { opacity:1; }
+  .light .v { flex:1; font-weight:700; } .light .sc { font-size:26px; font-weight:800; line-height:1; text-align:center; } .light .sc small { display:block; font-size:12px; font-weight:400; color:var(--muted); }
   section { padding:44px 0; border-top:1px solid var(--line); }
   h2 { font-size:28px; margin:0 0 18px; }
   .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; }
@@ -113,7 +119,6 @@
 const form = document.getElementById('checkForm'), q = document.getElementById('q'), out = document.getElementById('result'), go = document.getElementById('go');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icons = {ok:'✔', bad:'✖', warn:'!', info:'i', na:'—'};
-const verdict = {ok:'Серьёзных проблем не найдено', warn:'Есть замечания', bad:'Найдены риски'};
 document.getElementById('demo').onclick = e => { e.preventDefault(); q.value = 'X7TEST00000000001'; form.requestSubmit(); };
 form.addEventListener('submit', async e => {
   e.preventDefault();
@@ -123,11 +128,15 @@ form.addEventListener('submit', async e => {
     const data = await r.json();
     if (!r.ok) { out.innerHTML = `<div class="card err">${esc(data.detail || 'Ошибка проверки')}</div>`; return; }
     const v = data.vehicle || {};
-    const flags = data.flags.map(f => `<div class="flag ${esc(f.status)}"><b>${icons[f.status]||''} ${esc(f.title)}</b>${esc(f.summary)}</div>`).join('');
+    const L = data.light;
+    const order = [...L.red, ...L.yellow, ...L.green, ...L.na];
+    const flags = order.map(f => `<div class="flag ${esc(f.status)}"><b>${icons[f.status]||''} ${esc(f.title)}</b>${esc(f.summary)}</div>`).join('');
+    const lamp = ['r','y','g'].map((c, i) => `<i class="${c} ${['red','yellow','green'][i] === L.color ? 'on' : ''}"></i>`).join('');
     const offers = data.offers.map(o => `${esc(o.title)} — ${o.price} ₽`).join(' · ');
     out.innerHTML = `<div class="card">
       <div class="muted">${esc(v.vin || '')}${v.plate ? ' · ' + esc(v.plate) : ''}</div>
-      <h3 style="margin:4px 0">${esc(v.title || 'Автомобиль')}${v.year ? ', ' + esc(v.year) : ''} — ${verdict[data.overall]}</h3>
+      <h3 style="margin:4px 0">${esc(v.title || 'Автомобиль')}${v.year ? ', ' + esc(v.year) : ''}</h3>
+      <div class="light ${esc(L.color)}"><div class="lamp">${lamp}</div><div class="v">${esc(L.verdict)}<div class="hint" style="margin:2px 0 0;font-weight:400">Экспресс-проверка: ${L.checked} источника. Полный отчёт проверит ещё ограничения, пробег, владельцев, лизинг и др.</div></div><div class="sc">${L.score}<small>из 100</small></div></div>
       <div class="flags">${flags}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         ${data.buy_url ? `<a class="btn" href="${esc(data.buy_url)}">Полный отчёт в Telegram</a>` : ''}

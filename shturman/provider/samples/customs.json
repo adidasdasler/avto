@@ -1,0 +1,27 @@
+{
+  "success": 1,
+  "query": {
+    "vin": "X7TEST00000000001"
+  },
+  "found": true,
+  "requestDate": "2026-10-13",
+  "records": [
+    {
+      "source": "provider",
+      "vin": "X7TEST00000000001",
+      "model": "LADA VESTA",
+      "chassis": null,
+      "body": "X7TEST00000000001",
+      "country": "Россия",
+      "releaseDate": "2021-05-20"
+    }
+  ],
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

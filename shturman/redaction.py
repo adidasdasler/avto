@@ -19,12 +19,13 @@ _PII_TOKENS = {
     "fio", "lastname", "firstname", "middlename", "surname", "patronymic",
     "birth", "birthday", "birthdate", "dob", "passport", "snils",
     "phone", "phones", "tel", "email", "mail",
-    "pledgor", "pledgors", "debtor", "debtors", "driver", "drivers", "insurant", "insurer_person",
-    "fullname", "person", "persons", "owneraddress", "address_person",
+    "pledgor", "pledgors", "debtor", "debtors", "lessees", "insurant",
+    "fullname", "persons", "owneraddress",
 }
 # Сочетания, которые ПДн только вместе (ownerName, ownerInn, ownerAddress...).
 _PII_PAIRS = {("owner", "name"), ("owner", "inn"), ("owner", "address"), ("seller", "name"),
-              ("holder", "name"), ("client", "name")}
+              ("holder", "name"), ("client", "name"),
+              ("driver", "license"), ("person", "name")}
 
 _FIO_FULL = re.compile(
     r"\b[А-ЯЁ][а-яё]+(?:-[А-ЯЁ][а-яё]+)?\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+(?:вич|вна|ична|чна|оглы|кызы)\b"

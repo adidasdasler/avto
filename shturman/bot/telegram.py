@@ -23,13 +23,13 @@ from ..cascade import TIER_TITLES
 from ..config import Settings
 from ..db import Check, User
 from ..identifiers import Identifier, IdentifierError, parse_many
+from ..rules import traffic_light
 from ..services import CheckService, LimitExceeded
 
 log = logging.getLogger(__name__)
 router = Router()
 
 ICONS = {"ok": "✅", "bad": "❌", "warn": "⚠️", "info": "ℹ️", "na": "➖"}
-VERDICT = {"ok": "🟢 Серьёзных проблем не найдено", "warn": "🟡 Есть замечания", "bad": "🔴 Найдены риски"}
 LEGAL = {"person": "Физлицо", "selfemployed": "Самозанятый", "ip": "ИП", "llc": "ООО"}
 
 HELP = (
@@ -46,13 +46,20 @@ def short(check_id: str) -> str:
     return check_id.replace("-", "")
 
 
+LAMP = {"red": "🔴", "yellow": "🟡", "green": "🟢"}
+
+
 def summary_text(check: Check) -> str:
     v = check.vehicle or {}
     head = html.escape(v.get("title") or "Автомобиль") + (f", {v['year']}" if v.get("year") else "")
     ids = " · ".join(html.escape(str(x)) for x in (v.get("vin"), v.get("plate")) if x)
-    lines = [f"<b>{head}</b>", ids, "", VERDICT.get(check.overall, ""), ""]
-    for f in check.flags or []:
-        lines.append(f"{ICONS.get(f['status'], '')} <b>{html.escape(f['title'])}</b>: {html.escape(f['summary'])}")
+    light = traffic_light(check.flags or [])
+    lines = [f"<b>{head}</b>", ids, "",
+             f"{LAMP[light['color']]} <b>{html.escape(light['verdict'])}</b> · {light['score']}/100", ""]
+    for title, key in (("Критично", "red"), ("Внимание", "yellow"), ("В порядке", "green"), ("Нет данных", "na")):
+        if light[key]:
+            lines.append(f"<b>{title}:</b>")
+            lines += [f"{ICONS[f['status']]} {html.escape(f['title'])}: {html.escape(f['summary'])}" for f in light[key]]
     lines.append(f"\nТариф: «{TIER_TITLES[check.tier]}»")
     return "\n".join(lines)
 

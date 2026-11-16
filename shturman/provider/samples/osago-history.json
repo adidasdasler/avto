@@ -1,0 +1,90 @@
+{
+  "success": 1,
+  "query": {
+    "vin": "X7TEST00000000001"
+  },
+  "found": 2,
+  "active": 1,
+  "policies": [
+    {
+      "companyName": "Тестовая страховая",
+      "policySerial": "ХХХ",
+      "policyNumber": "0000000001",
+      "status": "Действует",
+      "isActive": true,
+      "startDate": "2026-04-01",
+      "endDate": "2027-03-31",
+      "createDate": "2026-04-01",
+      "periods": [
+        {
+          "start": "2026-04-01",
+          "end": "2027-03-31"
+        }
+      ],
+      "region": "г Москва",
+      "purpose": "Личная",
+      "purposeType": "PERSONAL",
+      "driversLimited": true,
+      "driversCount": 2,
+      "ownerType": "Физическое лицо",
+      "insurantType": "Физическое лицо",
+      "vin": "X7TEST00000000001",
+      "bodyNumber": null,
+      "chassisNumber": null,
+      "regNumber": "Т000ТТ00",
+      "brand": "LADA",
+      "model": "VESTA",
+      "markmodel": "LADA VESTA",
+      "category": "B",
+      "powerHp": 106,
+      "maxWeight": null,
+      "passengersCount": null,
+      "hasTrailer": false,
+      "followsToRegistration": false
+    },
+    {
+      "companyName": "Тестовая страховая",
+      "policySerial": "ХХХ",
+      "policyNumber": "0000000002",
+      "status": "Прекратил действие",
+      "isActive": false,
+      "startDate": "2022-01-10",
+      "endDate": "2023-01-09",
+      "createDate": "2022-01-10",
+      "periods": [
+        {
+          "start": "2022-01-10",
+          "end": "2023-01-09"
+        }
+      ],
+      "region": "г Москва",
+      "purpose": "Такси",
+      "purposeType": "TAXI",
+      "driversLimited": false,
+      "driversCount": null,
+      "ownerType": "Юридическое лицо",
+      "insurantType": "Юридическое лицо",
+      "vin": "X7TEST00000000001",
+      "bodyNumber": null,
+      "chassisNumber": null,
+      "regNumber": "Т000ТТ00",
+      "brand": "LADA",
+      "model": "VESTA",
+      "markmodel": "LADA VESTA",
+      "category": "B",
+      "powerHp": 106,
+      "maxWeight": null,
+      "passengersCount": null,
+      "hasTrailer": false,
+      "followsToRegistration": false
+    }
+  ],
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

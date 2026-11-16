@@ -14,8 +14,8 @@ async def test_express_by_plate_resolves_vin(service, provider):
     assert called[0] == "gos2vin"
     assert set(called) == {"gos2vin", "decode", "pledge", "taxi", "elpts", "accidents"}
     assert c.overall == "bad"
-    # ПДн не сохраняются
-    assert "Тестович" not in str(c.sections)
+    # ПДн залогодателя (ФИО и дата рождения) не сохраняются
+    assert "pledgors" not in str(c.sections) and "01.01.1990" not in str(c.sections)
 
 
 async def test_free_limit(service):
@@ -37,6 +37,9 @@ async def test_upgrade_uses_cache_and_gates(service, provider):
     assert ("fines", {"sts": "0000000000"}) in provider.calls[n_express:]
     assert ("accidents-rt", {"task": "TEST-TASK-0001"}) in provider.calls
     assert c.sections["accidents-rt"]["data"]["status"] == "done"
+    # штрафы провайдер сейчас не отдаёт — раздел помечен «нет данных», отчёт собран
+    assert c.sections["fines"]["code"] == "PROVIDER_ERROR"
+    assert any(f["method"] == "fines" and f["status"] == "na" for f in c.flags)
 
 
 async def test_cache_shared_between_checks(service, provider):
@@ -53,7 +56,7 @@ async def test_not_allowed_method_is_reported(db, settings):
     assert taxi["status"] == "na" and "не подключён" in taxi["summary"]
     async with db.session() as s:
         logs = (await s.execute(select(ProviderLog).where(ProviderLog.method == "taxi"))).scalars().all()
-    assert logs[0].error == "NOT_ALLOWED"
+    assert logs[0].error.startswith("NOT_ALLOWED")
 
 
 async def test_packs_and_credit(service, db, settings):

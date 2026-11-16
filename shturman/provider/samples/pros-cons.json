@@ -1,0 +1,42 @@
+{
+  "success": 1,
+  "query": {
+    "vin": "X7TEST00000000001"
+  },
+  "found": 1,
+  "model": "LADA Vesta (тестовая модель)",
+  "reliability": "Средняя. Простая конструкция, доступные запчасти.",
+  "reliabilityLevel": "Средняя",
+  "bodyCorrosion": "Тестовое описание: следить за порогами и арками.",
+  "liquidity": "Высокая на вторичном рынке.",
+  "liquidityLevel": "Высокая",
+  "pros": "Недорогое обслуживание, большой клиренс, доступность сервиса.",
+  "prosList": [
+    "Недорогое обслуживание",
+    "Большой клиренс",
+    "Доступность сервиса"
+  ],
+  "cons": "Шумоизоляция, ресурс подвески.",
+  "consList": [
+    "Шумоизоляция",
+    "Ресурс подвески"
+  ],
+  "vehicle": {
+    "brand": "Lada",
+    "model": "Vesta",
+    "generation": null,
+    "yearFrom": 2015,
+    "yearTo": null,
+    "bodyType": null,
+    "transmission": null,
+    "drive": "FWD"
+  },
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

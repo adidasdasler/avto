@@ -1,0 +1,9 @@
+{
+  "success": 1,
+  "status": "done",
+  "taskId": "TEST-TASK-0001",
+  "found": 0,
+  "records": [],
+  "testMode": true,
+  "billing": {"charged": 0, "currency": "RUB", "billed": false, "balance": 0, "requestId": null}
+}

@@ -1,0 +1,43 @@
+{
+  "success": 1,
+  "record": {
+    "vin": "X7TEST00000000001",
+    "bodyNumber": null,
+    "regNumber": "Т000ТТ00",
+    "sts": {
+      "num": "0000000000",
+      "date": "2021-06-01"
+    },
+    "pts": {
+      "num": "00ТТ000000",
+      "date": "2021-05-20"
+    },
+    "model": "LADA VESTA",
+    "year": "2021",
+    "color": "Белый",
+    "engineVolume": "1596",
+    "powerHp": "106.0",
+    "category": "B",
+    "recordStatus": "действующая",
+    "ownershipPeriods": [
+      {
+        "personType": "Юридическое лицо",
+        "from": "2021-06-01",
+        "to": "2023-04-10"
+      },
+      {
+        "personType": "Физическое лицо",
+        "from": "2023-04-10",
+        "to": null
+      }
+    ]
+  },
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

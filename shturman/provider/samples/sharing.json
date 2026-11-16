@@ -1,0 +1,18 @@
+{
+  "success": 1,
+  "query": {
+    "vin": "X7TEST00000000001"
+  },
+  "isCarsharing": true,
+  "company": null,
+  "checkedBy": "database",
+  "dataNote": "Проверка по накопленной базе каршеринга (архив). Полная проверка по реестру доступна по госномеру.",
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

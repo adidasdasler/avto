@@ -11,6 +11,7 @@ X-Test-Mode: 1. Ошибки доступа: NO_TOKEN, TOKEN_INVALID, NOT_ALLOWE
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -76,7 +77,12 @@ def _error_from_payload(data: dict[str, Any]) -> tuple[str, str] | None:
     if isinstance(err, dict):
         return str(err.get("code") or "ERROR"), str(err.get("message") or err.get("text") or "")
     if isinstance(err, str) and err:
-        return err, str(data.get("message") or data.get("error_text") or "")
+        msg = str(data.get("message") or data.get("error_text") or err)
+        # Коды вида NO_TOKEN / NOT_ALLOWED; иначе провайдер прислал текст
+        # (например, «Метод сейчас недоступен.»).
+        if re.fullmatch(r"[A-Z][A-Z0-9_]+", err):
+            return err, msg
+        return "PROVIDER_ERROR", msg
     if data.get("success") in (0, False, "0"):
         code = data.get("code") or data.get("error_code") or "ERROR"
         return str(code), str(data.get("message") or "")

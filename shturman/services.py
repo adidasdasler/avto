@@ -82,7 +82,7 @@ class CheckService:
             check.vin, check.plate = res.vin, res.plate
             check.vehicle = res.vehicle
             check.sections = res.sections
-            check.flags = [f.to_dict() for f in res.flags]
+            check.flags = res.flags
             check.overall = res.overall
             check.provider_cost = float(check.provider_cost or 0) + res.cost
             await s.commit()

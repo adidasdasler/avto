@@ -1,0 +1,41 @@
+{
+  "success": 1,
+  "query": {
+    "vin": "X7TEST00000000001"
+  },
+  "found": 2,
+  "records": [
+    {
+      "eaisto_number": "000000000000001",
+      "date_of_diagnosis": "2025-05-20",
+      "date_of_validity": "2027-05-20",
+      "car_number": "Т000ТТ00",
+      "car_vin": "X7TEST00000000001",
+      "car_body": null,
+      "car_chassis": null,
+      "operator_number": "00000",
+      "is_valid": 1,
+      "car_mileage": 64000
+    },
+    {
+      "eaisto_number": "000000000000002",
+      "date_of_diagnosis": "2023-05-15",
+      "date_of_validity": "2025-05-15",
+      "car_number": "Т000ТТ00",
+      "car_vin": "X7TEST00000000001",
+      "car_body": null,
+      "car_chassis": null,
+      "operator_number": "00000",
+      "is_valid": 0,
+      "car_mileage": 31000
+    }
+  ],
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}
