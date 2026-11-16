@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shturman
+      POSTGRES_PASSWORD: shturman
+      POSTGRES_DB: shturman
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shturman"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://shturman:shturman@db:5432/shturman
+    ports: ["8000:8000"]
+    depends_on: {db: {condition: service_healthy}}
+    restart: unless-stopped
+
+  bot:
+    build: .
+    command: ["python", "-m", "shturman.bot"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://shturman:shturman@db:5432/shturman
+    depends_on: {db: {condition: service_healthy}}
+    restart: unless-stopped
+
+volumes:
+  pgdata:

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ vehicle.title }} — отчёт {{ brand }}</title>
+<style>
+  @page { size: A4; margin: 14mm 12mm 20mm;
+    @bottom-left { content: "Страница " counter(page) " из " counter(pages) "  •  {{ vehicle.title }} • {{ generated }} • {{ vehicle.vin or '' }}"; font-size: 8pt; color: #777; font-family: "DejaVu Sans", sans-serif; }
+    @bottom-right { content: "{{ brand }}"; font-size: 8pt; color: #777; font-family: "DejaVu Sans", sans-serif; } }
+  :root { --ok:#1f9d55; --bad:#d64545; --warn:#e08a00; --info:#3b6ea8; --muted:#666; --soft:#f1f1f1; }
+  * { box-sizing: border-box; }
+  body { font-family: "DejaVu Sans", "Segoe UI", Arial, sans-serif; color:#111; margin:0; font-size: 10.5pt; background:#fff; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 16px; }
+  header.top { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #111; padding-bottom:10px; }
+  header.top .logo { font-weight:800; font-size:15pt; }
+  header.top h1 { margin: 4px 0; font-size: 17pt; }
+  .muted { color: var(--muted); }
+  .badge { display:inline-block; padding:3px 10px; border-radius:12px; font-weight:700; font-size:9pt; color:#fff; }
+  .badge.ok{background:var(--ok)} .badge.bad{background:var(--bad)} .badge.warn{background:var(--warn)}
+  .summary { display:grid; grid-template-columns: 1fr 1fr; gap: 6px 28px; margin: 18px 0; }
+  .flag .t { font-weight:700; } .flag .s { padding-left: 18px; }
+  .flag.ok .t{color:var(--ok)} .flag.bad .t{color:var(--bad)} .flag.warn .t{color:var(--warn)}
+  .flag.info .t{color:var(--info)} .flag.na .t{color:var(--muted)}
+  section { margin-top: 18px; break-inside: auto; }
+  section h2 { background: var(--soft); border-radius: 8px; padding: 10px 14px; font-size: 13pt; margin: 0 0 10px; break-after: avoid; }
+  .grid3 { display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px 16px; }
+  .grid2 { display:grid; grid-template-columns: repeat(2, 1fr); gap: 8px 16px; }
+  .kv b { display:block; font-size: 9.5pt; } .kv span { font-size: 9.5pt; }
+  .note { border-radius: 14px; padding: 7px 14px; margin: 6px 0; display:inline-block; }
+  .note.ok { background:#e2f3e8; } .note.bad { background:#fdecea; color:#a32020; } .note.warn{background:#fff2dc} .note.info { background:#e6eef7; }
+  .rec { border-top: 1px solid #ddd; padding: 10px 2px; break-inside: avoid; }
+  table.t { width:100%; border-collapse: collapse; } table.t td, table.t th { text-align:left; padding:7px 4px; border-bottom:1px solid #ddd; }
+  .chart { width:100%; height:auto; }
+  .photos img { width: 100%; max-height: 360px; object-fit: cover; border-radius: 6px; margin-bottom: 8px; }
+  .locked li { color: var(--muted); }
+  .cta { margin: 20px 0; padding: 14px; border: 2px dashed #bbb; border-radius: 10px; }
+  .cta a { font-weight: 700; }
+  ul.pc { margin: 4px 0; }
+  @media (max-width: 600px) { .summary, .grid3, .grid2 { grid-template-columns: 1fr; } }
+  @media print { .noprint { display:none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div>
+    <div class="logo">{{ brand }}</div>
+    <h1>Отчёт по {{ query_label }}: {{ check.query if check.kind != 'vin' else vehicle.vin }}</h1>
+    <div class="muted">{{ vehicle.title }}{% if vehicle.year %}, {{ vehicle.year }}{% endif %} • Тариф «{{ tier_title }}» • Сформирован {{ generated }}</div>
+  </div>
+  <div><span class="badge {{ check.overall }}">{{ {'ok':'Без проблем','warn':'Есть замечания','bad':'Есть риски'}[check.overall] }}</span></div>
+</header>
+
+<div class="summary">
+  {% for f in flags %}
+  <div class="flag {{ f.status }}"><div class="t">{{ icons[f.status] }} {{ f.title }}</div><div class="s">{{ f.summary }}</div></div>
+  {% endfor %}
+</div>
+
+<section>
+  <h2>Техническая информация</h2>
+  <div class="grid3">
+    {% for label, val in [('Модель', vehicle.title), ('Год', vehicle.year), ('Цвет', vehicle.color),
+       ('Госномер', vehicle.plate), ('VIN-код', vehicle.vin), ('Номер кузова', vehicle.body),
+       ('Двигатель', vehicle.engine_number), ('Объём', (vehicle.engine_volume ~ ' см³') if vehicle.engine_volume else None),
+       ('Мощность', ((vehicle.power_hp|string) ~ ' л. с.' ~ ((' / ' ~ vehicle.power_kw ~ ' кВт') if vehicle.power_kw else '')) if vehicle.power_hp else None),
+       ('Шасси', vehicle.chassis), ('Тип автомобиля', vehicle.vehicle_type), ('Категория', vehicle.category)] %}
+    <div class="kv"><b>{{ label }}:</b><span>{{ val if val else 'нет данных' }}</span></div>
+    {% endfor %}
+  </div>
+</section>
+
+{% for s in sections %}
+<section>
+  <h2>{{ s.title }}</h2>
+  {% if s.error %}
+    <div class="note info">Не удалось получить данные: {{ s.error }}</div>
+  {% elif s.kind == 'pts' %}
+    {% if s.has_epts %}<div class="note ok">✔ Найден электронный ПТС</div>
+    {% else %}<div class="note bad">✖ Транспортное средство не имеет электронного ПТС</div>
+      {% if s.paper %}<div class="kv"><b>Данные о бумажном ПТС:</b><span>{{ s.paper }}</span></div>{% endif %}{% endif %}
+    {% for row in s.rows %}<div class="rec grid2">{% for k, v in row %}<div class="kv"><b>{{ k }}:</b><span>{{ v }}</span></div>{% endfor %}</div>{% endfor %}
+  {% elif s.kind == 'owners' %}
+    <div class="note info">Количество владельцев: {{ s.owners|length }}</div>
+    {% for o in s.owners %}
+    <div class="rec"><b>{{ loop.index }}-й владелец{% if o.owner_type %} ({{ o.owner_type|lower }}){% endif %}</b><br>{{ o.from }} — {{ o.to }}<br><span class="muted">{{ o.operation }}</span></div>
+    {% endfor %}
+  {% elif s.kind == 'mileage' %}
+    {% if s.rollback %}<div class="note bad">✖ Пробег уменьшался между записями — возможна скрутка</div>{% endif %}
+    {{ s.chart }}
+    <table class="t"><tr><th>Дата</th><th>Пробег</th><th>Источник</th></tr>
+      {% for r in s.rows|reverse %}<tr><td>{{ r.date }}</td><td><b>{{ r.mileage }}</b></td><td class="muted">{{ r.type }}</td></tr>{% endfor %}</table>
+  {% elif s.kind == 'pledge' %}
+    {% if s.active %}<div class="note bad">● В ЗАЛОГЕ — автомобиль находится в залоге!</div>
+    {% else %}<div class="note ok">✔ Не находится в залоге</div>{% endif %}
+    {% for row in s.rows %}<div class="rec grid2">{% for k, v in row %}<div class="kv"><b>{{ k }}:</b><span>{{ v }}</span></div>{% endfor %}</div>{% endfor %}
+  {% elif s.kind == 'fines' %}
+    {% if s.unpaid %}<div class="note bad">Неоплаченных штрафов: {{ s.unpaid }} на {{ n.fmt_num(s.total_unpaid, '₽') }}</div>
+    {% else %}<div class="note ok">✔ Неоплаченных штрафов нет</div>{% endif %}
+    {% for row in s.rows %}<div class="rec grid2">{% for k, v in row %}<div class="kv"><b>{{ k }}:</b><span>{{ v }}</span></div>{% endfor %}</div>{% endfor %}
+  {% elif s.kind == 'price' %}
+    <div class="grid3"><div class="kv"><b>Минимум:</b><span>{{ s.min }}</span></div><div class="kv"><b>Средняя:</b><span>{{ s.avg }}</span></div><div class="kv"><b>Максимум:</b><span>{{ s.max }}</span></div></div>
+  {% elif s.kind == 'proscons' %}
+    <div class="grid2"><div><b>Плюсы</b><ul class="pc">{% for p in s.pros %}<li>{{ p }}</li>{% endfor %}</ul></div>
+      <div><b>Минусы</b><ul class="pc">{% for p in s.cons %}<li>{{ p }}</li>{% endfor %}</ul></div></div>
+  {% elif s.kind == 'photos' %}
+    {% if s.photos %}<div class="photos">{% for p in s.photos %}<img src="{{ p.url }}" alt="Фото {{ loop.index }}"><div class="muted">{{ p.date }} {{ p.source }}</div>{% endfor %}</div>
+    {% else %}<div class="note info">Фотографии не найдены</div>{% endif %}
+  {% else %}
+    {% if s.count == 0 %}
+      <div class="note ok">✔ Записей не найдено</div>
+    {% else %}
+      <div class="note {{ 'bad' if s.kind in ('accidents','restrictions') else 'info' }}">Найдено: {{ records_word(s.count) }}</div>
+      {% for row in s.rows %}<div class="rec grid2">{% for k, v in row %}<div class="kv"><b>{{ k }}:</b><span>{{ v }}</span></div>{% endfor %}</div>{% endfor %}
+    {% endif %}
+  {% endif %}
+</section>
+{% endfor %}
+
+{% if skipped %}
+<section><h2>Не проверялось</h2>
+  <ul>{% for t, why in skipped %}<li>{{ t }} — {{ why }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% if locked %}
+<section class="locked"><h2>Доступно в полном отчёте</h2>
+  <ul>{% for t, tier in locked %}<li>🔒 {{ t }} <span class="muted">— тариф «{{ tier }}»</span></li>{% endfor %}</ul>
+  {% if bot_link %}<div class="cta noprint">Получить полный отчёт: <a href="{{ bot_link }}">открыть в Telegram</a></div>{% endif %}
+</section>
+{% endif %}
+
+<p class="muted" style="margin-top:24px;font-size:8.5pt">Отчёт сформирован по данным открытых и коммерческих источников на дату формирования. Персональные данные третьих лиц скрыты.
+Ссылка на отчёт: {{ report_url }}</p>
+</div>
+</body>
+</html>

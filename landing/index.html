@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ brand }} — проверка авто по VIN</title>
+<meta name="description" content="Проверка автомобиля по VIN, госномеру или ссылке на объявление: залоги, такси, ДТП, ограничения, пробег, штрафы.">
+<style>
+  :root { --bg:#fbfaf7; --fg:#15171a; --muted:#5d6470; --card:#fff; --line:#e4e2dc; --accent:#1d6fe0; --accent-fg:#fff;
+          --ok:#1f9d55; --bad:#d64545; --warn:#c77700; --info:#3b6ea8; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#121417; --fg:#eceef1; --muted:#9aa3ae; --card:#1b1e23; --line:#2c3038; --accent:#5b9cff; --accent-fg:#0b0d10; } }
+  :root[data-theme="dark"] { --bg:#121417; --fg:#eceef1; --muted:#9aa3ae; --card:#1b1e23; --line:#2c3038; --accent:#5b9cff; --accent-fg:#0b0d10; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); }
+  .wrap { max-width:1080px; margin:0 auto; padding:0 16px; }
+  nav { display:flex; justify-content:space-between; align-items:center; padding:18px 0; }
+  nav b { font-size:18px; letter-spacing:.2px; }
+  .hero { padding:48px 0 32px; }
+  .hero h1 { font-size:clamp(28px, 5vw, 46px); line-height:1.1; margin:0 0 14px; max-width:780px; }
+  .hero p { color:var(--muted); font-size:18px; max-width:640px; margin:0 0 24px; }
+  form.check { display:flex; gap:10px; flex-wrap:wrap; max-width:720px; }
+  form.check input { flex:1 1 320px; min-width:0; font-size:17px; padding:14px 16px; border-radius:10px; border:1.5px solid var(--line); background:var(--card); color:var(--fg); }
+  .btn { display:inline-block; border:0; border-radius:10px; padding:14px 22px; font-size:16px; font-weight:600; cursor:pointer; text-decoration:none; background:var(--accent); color:var(--accent-fg); }
+  .btn.ghost { background:transparent; color:var(--fg); border:1.5px solid var(--line); }
+  .hint { color:var(--muted); font-size:14px; margin-top:10px; }
+  #result { margin-top:24px; max-width:720px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; }
+  .flags { display:grid; grid-template-columns:1fr 1fr; gap:8px 20px; margin:14px 0; }
+  .flag b { display:block; } .flag.ok b{color:var(--ok)} .flag.bad b{color:var(--bad)} .flag.warn b{color:var(--warn)} .flag.info b{color:var(--info)} .flag.na b{color:var(--muted)}
+  .err { color:var(--bad); }
+  section { padding:44px 0; border-top:1px solid var(--line); }
+  h2 { font-size:28px; margin:0 0 18px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; }
+  .price { font-size:26px; font-weight:700; margin:6px 0; }
+  .muted { color:var(--muted); }
+  .steps { counter-reset: s; } .steps .card::before { counter-increment:s; content:counter(s); display:inline-grid; place-items:center; width:30px; height:30px; border-radius:50%; background:var(--accent); color:var(--accent-fg); font-weight:700; margin-bottom:8px; }
+  details { border-bottom:1px solid var(--line); padding:12px 0; } summary { cursor:pointer; font-weight:600; }
+  footer { padding:28px 0 40px; color:var(--muted); font-size:14px; }
+  @media (max-width:560px) { .flags { grid-template-columns:1fr; } .btn { width:100%; text-align:center; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav><b>{{ brand }}</b>{% if bot_link %}<a class="btn ghost" href="{{ bot_link }}">Открыть бота</a>{% endif %}</nav>
+
+  <div class="hero">
+    <h1>Проверьте автомобиль до покупки — за минуту</h1>
+    <p>Залоги, работа в такси, ДТП, ограничения и розыск, скрутка пробега, штрафы. Введите VIN, госномер или ссылку на объявление.</p>
+    <form class="check" id="checkForm">
+      <input id="q" name="query" required autocomplete="off" placeholder="VIN, госномер или ссылка на объявление" aria-label="VIN, госномер или ссылка">
+      <button class="btn" type="submit" id="go">Проверить бесплатно</button>
+    </form>
+    <div class="hint">Бесплатно: {{ free_per_day }} экспресс-проверки в сутки. Например, <a href="#" id="demo">X7TEST00000000001</a> — тестовый VIN.</div>
+    <div id="result" aria-live="polite"></div>
+  </div>
+
+  <section>
+    <h2>Пример отчёта</h2>
+    <p class="muted">Полный отчёт «Досье+»: техданные, владельцы, график пробега, ДТП, залоги, ограничения, штрафы, ОСАГО, объявления, фото, оценка стоимости.</p>
+    <a class="btn ghost" href="/example" target="_blank" rel="noopener">Открыть пример отчёта</a>
+  </section>
+
+  <section>
+    <h2>Тарифы</h2>
+    <div class="grid">
+      <div class="card"><b>Экспресс</b><div class="price">0 ₽</div><div class="muted">Залог, такси, ЭПТС, архив ДТП</div></div>
+      {% for p in products.values() if p.tier %}
+      <div class="card"><b>{{ p.title }}</b><div class="price">{{ p.price }} ₽</div><div class="muted">{{ p.description }}</div></div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="steps">
+    <h2>Как это работает</h2>
+    <div class="grid">
+      <div class="card"><b>Введите VIN, госномер или ссылку</b><div class="muted">На сайте или в боте — как удобнее.</div></div>
+      <div class="card"><b>Получите экспресс-проверку</b><div class="muted">Сразу видно главные риски: залог, такси, ДТП.</div></div>
+      <div class="card"><b>Откройте полный отчёт</b><div class="muted">Оплатите в боте и получите PDF за пару минут.</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Автоподборщикам</h2>
+    <div class="grid">
+      {% for code in ['pack_10','pack_25','pack_50','unlimited_day'] %}{% set p = products[code] %}
+      <div class="card"><b>{{ p.title }}</b><div class="price">{{ p.price }} ₽</div><div class="muted">{{ p.description }}</div></div>
+      {% endfor %}
+    </div>
+    <p class="muted">Проверка списком: пришлите боту несколько VIN — по одному в строке. Работаем с ИП и самозанятыми, по счёту и акту.</p>
+  </section>
+
+  <section>
+    <h2>Вопросы</h2>
+    <details><summary>Что вы проверяете?</summary><p>Реестр залогов, работу в такси, ДТП, ограничения и розыск, историю пробегов и техосмотров, штрафы, полисы ОСАГО, объявления о продаже, лизинг, суды, таможню, отзывные кампании и рыночную стоимость.</p></details>
+    <details><summary>Откуда данные?</summary><p>Из официальных реестров (ГИБДД, ФНП, ЕАИСТО и др.) и коммерческих источников через лицензированного агрегатора данных.</p></details>
+    <details><summary>Как быстро готов отчёт?</summary><p>Экспресс-проверка — несколько секунд. Полный отчёт — обычно до 2 минут; проверка ДТП по базе ГИБДД в реальном времени может занять дольше.</p></details>
+    <details><summary>Что с персональными данными?</summary><p>Данные владельцев и третьих лиц в отчёт не попадают и у нас не хранятся.</p></details>
+  </section>
+
+  <section>
+    <h2>Проверяйте в мессенджере</h2>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      {% if bot_link %}<a class="btn" href="{{ bot_link }}">Открыть в Telegram</a>{% endif %}
+      {% if max_link %}<a class="btn ghost" href="{{ max_link }}">Открыть в MAX</a>{% endif %}
+    </div>
+  </section>
+
+  <footer>© {{ brand }}</footer>
+</div>
+<script>
+const form = document.getElementById('checkForm'), q = document.getElementById('q'), out = document.getElementById('result'), go = document.getElementById('go');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icons = {ok:'✔', bad:'✖', warn:'!', info:'i', na:'—'};
+const verdict = {ok:'Серьёзных проблем не найдено', warn:'Есть замечания', bad:'Найдены риски'};
+document.getElementById('demo').onclick = e => { e.preventDefault(); q.value = 'X7TEST00000000001'; form.requestSubmit(); };
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  go.disabled = true; go.textContent = 'Проверяем…'; out.innerHTML = '';
+  try {
+    const r = await fetch('/api/check', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query: q.value})});
+    const data = await r.json();
+    if (!r.ok) { out.innerHTML = `<div class="card err">${esc(data.detail || 'Ошибка проверки')}</div>`; return; }
+    const v = data.vehicle || {};
+    const flags = data.flags.map(f => `<div class="flag ${esc(f.status)}"><b>${icons[f.status]||''} ${esc(f.title)}</b>${esc(f.summary)}</div>`).join('');
+    const offers = data.offers.map(o => `${esc(o.title)} — ${o.price} ₽`).join(' · ');
+    out.innerHTML = `<div class="card">
+      <div class="muted">${esc(v.vin || '')}${v.plate ? ' · ' + esc(v.plate) : ''}</div>
+      <h3 style="margin:4px 0">${esc(v.title || 'Автомобиль')}${v.year ? ', ' + esc(v.year) : ''} — ${verdict[data.overall]}</h3>
+      <div class="flags">${flags}</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${data.buy_url ? `<a class="btn" href="${esc(data.buy_url)}">Полный отчёт в Telegram</a>` : ''}
+        <a class="btn ghost" href="${esc(data.report_url)}" target="_blank" rel="noopener">Экспресс-отчёт</a>
+      </div>
+      <div class="hint">${offers}. Осталось бесплатных проверок сегодня: ${data.free_left}.</div></div>`;
+  } catch (err) {
+    out.innerHTML = '<div class="card err">Сервис временно недоступен, попробуйте позже.</div>';
+  } finally { go.disabled = false; go.textContent = 'Проверить бесплатно'; }
+});
+</script>
+</body>
+</html>

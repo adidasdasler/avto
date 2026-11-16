@@ -1,0 +1,108 @@
+# Штурман Авто — MVP (лендинг + Telegram-бот)
+
+Проверка автомобиля по VIN, госномеру или ссылке на объявление на данных API
+[avtovincod.ru](https://avtovincod.ru). Реализует этап 1–2 спецификации «Штурман Авто — спецификация MVP»:
+лендинг с бесплатной экспресс-проверкой, Telegram-бот, каскад запросов к провайдеру по тарифам,
+RedactionLayer, кэш по VIN, PDF-отчёт и биллинг (разовые отчёты, пакеты, безлимит на сутки).
+
+## Быстрый старт (без токена, на офлайн-образцах)
+
+```bash
+python -m venv .venv && . .venv/bin/activate
+pip install -e '.[dev]'
+cp .env.example .env
+uvicorn shturman.api.app:get_app --factory --reload   # http://localhost:8000
+pytest
+```
+
+`PROVIDER_MODE=mock` (по умолчанию) отдаёт ответы-образцы без сети. Пример полного отчёта — `/example`.
+
+## Подключение avtovincod.ru
+
+1. Зарегистрироваться в личном кабинете avtovincod.ru и получить токен.
+2. В `.env`: `PROVIDER_MODE=live`, `AVC_TOKEN=...`.
+3. Сверить схему ответов (бесплатно, тестовые значения работают даже при нулевом балансе):
+   ```bash
+   AVC_TOKEN=... python scripts/dump_test_responses.py
+   ```
+   Ответы лягут в `tests/fixtures/live/`. **Поля внутри `records` в офлайн-образцах
+   (`shturman/provider/mock.py`) — наше предположение**: по реальным ответам поправить
+   ключи в `shturman/normalize.py`, `shturman/rules.py`, `shturman/cascade.py::vehicle_summary`
+   и шаблоне отчёта. Разбор устроен терпимо (перебирает несколько вариантов ключей, неизвестные
+   поля выводит списком), так что отчёт не сломается, но выводы «светофора» надо проверить.
+
+Тестовые значения провайдера: VIN `X7TEST00000000001`, госномер `Т000ТТ00`, кузов `TEST-0000001`,
+СТС `0000000000`. По ним любой метод отвечает образцом с `"testMode": true` и `billing.charged = 0`.
+
+## Тарифы и каскад
+
+| Тариф | Методы avtovincod.ru |
+|---|---|
+| Экспресс (0 ₽, лимит в сутки) | `decode`, `pledge`, `taxi`, `elpts`, `accidents` (+ `gos2vin` для госномера) |
+| Базовый | + `score`, `brief`, `probeg`, `price`, `fines`* |
+| Досье | + `vin`, `osago-history`, `offers`, `plate-history`, `pros-cons`, `nomerogram`, `recalls`, `customs`*, `lizing`*, `lawsuits`*, `sharing`* |
+| Досье+ | + `accidents-rt` (асинхронный, с опросом `task`), `service`* |
+
+\* гейты — дорогие методы только по условию: штрафы — если `/brief` вернул СТС; таможня — VIN не
+отечественной сборки (не X/Z); лизинг — владелец-юрлицо или авто моложе 7 лет; суды — есть залог
+или ограничения; каршеринг — моложе 6 лет; сервисная история — моложе 10 лет.
+Набор методов меняется в `shturman/cascade.py`, цены — в `.env`.
+
+При повышении тарифа уже полученные разделы не запрашиваются повторно; ответы кэшируются
+по VIN с TTL по типу источника (`shturman/provider/methods.py`). Ошибки провайдера
+(`NOT_ALLOWED`, сеть и т. п.) не роняют отчёт — раздел помечается «нет данных».
+Расходы по блоку `billing` пишутся в таблицу `provider_log`.
+
+## Персональные данные
+
+`shturman/redaction.py` удаляет поля с ПДн (ФИО, дата рождения, паспорт, телефоны, e-mail,
+залогодатель, должник…) и маскирует ФИО/телефоны/e-mail в тексте **до** записи в кэш и БД.
+Хостинг — VPS в РФ (152-ФЗ).
+
+## Telegram-бот
+
+```bash
+TELEGRAM_BOT_TOKEN=... TELEGRAM_BOT_USERNAME=... python -m shturman.bot
+```
+
+`/start` → выбор роли (разово / подборщик + статус физлицо/ИП/самозанятый/ООО) → VIN/госномер/ссылка
+→ экспресс-результат с кнопками тарифов → оплата Telegram Payments (ЮКасса/СБП,
+`TELEGRAM_PAYMENT_TOKEN`) → PDF. Подборщик может прислать список VIN (по строке на каждый):
+при наличии пакета/безлимита сразу приходят PDF «Досье». Команды: `/balance`, `/history`, `/tariffs`, `/help`.
+Кнопка «Полный отчёт» на лендинге ведёт в бот по deep-link `?start=chk_<id>`.
+Для разработки без платёжки: `DEV_FAKE_PAYMENTS=true`.
+
+## Деплой
+
+```bash
+cp .env.example .env   # заполнить токены, PUBLIC_BASE_URL
+docker compose up -d --build
+```
+
+Поднимает PostgreSQL, API/лендинг (порт 8000) и бота. Перед API поставьте nginx с TLS
+и `TRUST_PROXY_HEADERS=true`.
+
+## Структура
+
+```
+shturman/
+  provider/   клиент avtovincod.ru, каталог методов, офлайн-образцы
+  identifiers.py  разбор VIN / госномера / кузова / ссылки
+  redaction.py    RedactionLayer
+  cascade.py      каскад по тарифам, гейты, кэш
+  rules.py        «светофор»
+  report/         HTML-шаблон и PDF (WeasyPrint)
+  billing.py      тарифы, пакеты, безлимит, бесплатный лимит
+  services.py     общее ядро для сайта и ботов
+  api/app.py      FastAPI: лендинг, /api/check, /r/<id>[.pdf], /example
+  bot/            Telegram-бот (aiogram 3)
+landing/index.html
+scripts/dump_test_responses.py
+```
+
+## Что дальше
+
+- Сверить схему ответов на настоящих тестовых значениях (см. выше).
+- MAX-бот (этап 3): ядро `CheckService` не зависит от платформы — нужен только адаптер на `maxapi`.
+- Счета и акты для ИП/ООО, white-label отчёты, миграции Alembic вместо `create_all`.
+- Извлечение VIN из страницы объявления (сейчас VIN/госномер ищутся только в самой ссылке).
