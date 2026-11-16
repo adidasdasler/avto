@@ -9,10 +9,11 @@ from __future__ import annotations
 import html
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import timezone
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import (BotCommand, BufferedInputFile, CallbackQuery, InlineKeyboardButton,
@@ -96,10 +97,16 @@ def balance_text(user: User, free_left: int) -> str:
 
 
 async def send_report(message: Message, service: CheckService, check: Check) -> None:
-    pdf = await service.pdf(check)
-    name = f"{(check.vehicle or {}).get('title', 'auto')}-{check.vin or short(check.id)[:8]}-{TIER_TITLES[check.tier]}.pdf"
-    await message.answer_document(BufferedInputFile(pdf, filename=name.replace(" ", "_")),
-                                  caption=summary_text(check)[:1024])
+    base = f"{(check.vehicle or {}).get('title', 'auto')}-{check.vin or short(check.id)[:8]}-{TIER_TITLES[check.tier]}"
+    base = base.replace(" ", "_")
+    try:
+        doc = BufferedInputFile(await service.pdf(check), filename=f"{base}.pdf")
+    except (OSError, ImportError) as e:
+        # Нет системных библиотек WeasyPrint (типично для Windows без GTK) — отдаём HTML-отчёт,
+        # он открывается в браузере и печатается в PDF через Ctrl+P.
+        log.warning("PDF не собран (%s), отправляю HTML", e.__class__.__name__)
+        doc = BufferedInputFile(service.html(check).encode("utf-8"), filename=f"{base}.html")
+    await message.answer_document(doc, caption=summary_text(check)[:1024])
 
 
 # ---------- команды ----------
@@ -345,7 +352,14 @@ async def fulfil(message: Message, service: CheckService, settings: Settings, us
 async def run_polling(service: CheckService, settings: Settings) -> None:
     if not settings.telegram_bot_token:
         raise SystemExit("Не задан TELEGRAM_BOT_TOKEN")
-    bot = Bot(settings.telegram_bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    session = AiohttpSession(proxy=settings.telegram_proxy) if settings.telegram_proxy else None
+    bot = Bot(settings.telegram_bot_token, session=session,
+              default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    me = await bot.get_me()
+    log.info("Бот @%s запущен", me.username)
+    if settings.telegram_bot_username and settings.telegram_bot_username.lstrip("@") != me.username:
+        log.warning("TELEGRAM_BOT_USERNAME=%s не совпадает с @%s — ссылки с сайта будут вести не туда",
+                    settings.telegram_bot_username, me.username)
     dp = Dispatcher()
     dp.include_router(router)
     dp["service"] = service
@@ -356,5 +370,4 @@ async def run_polling(service: CheckService, settings: Settings) -> None:
         BotCommand(command="history", description="История проверок"),
         BotCommand(command="tariffs", description="Тарифы"),
         BotCommand(command="help", description="Помощь")])
-    log.info("bot started at %s", datetime.now())
     await dp.start_polling(bot)

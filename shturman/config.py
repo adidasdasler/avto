@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     telegram_bot_username: str = ""
     # provider_token ЮКассы из @BotFather → Payments
     telegram_payment_token: str = ""
+    # Прокси для api.telegram.org, если он недоступен напрямую (http://, socks5:// — нужен aiohttp-socks)
+    telegram_proxy: str = ""
     # Только для разработки: «оплата» без платёжного провайдера
     dev_fake_payments: bool = False
 
