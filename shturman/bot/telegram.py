@@ -9,7 +9,6 @@ from __future__ import annotations
 import html
 import logging
 import uuid
-from datetime import timezone
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
@@ -20,93 +19,34 @@ from aiogram.types import (BotCommand, BufferedInputFile, CallbackQuery, InlineK
                            InlineKeyboardMarkup, LabeledPrice, Message, PreCheckoutQuery)
 
 from ..billing import Product, apply_payment, can_use_credit, has_unlimited, products
+from .common import (HELP, ICONS, LEGAL, Btn, balance_text, offer_buttons, packs_buttons, report_file, short,
+                     summary_text, tariffs_text)
 from ..cascade import TIER_TITLES
 from ..config import Settings
 from ..db import Check, User
 from ..identifiers import Identifier, IdentifierError, parse_many
-from ..rules import traffic_light
 from ..services import CheckService, LimitExceeded
 
 log = logging.getLogger(__name__)
 router = Router()
 
-ICONS = {"ok": "✅", "bad": "❌", "warn": "⚠️", "info": "ℹ️", "na": "➖"}
-LEGAL = {"person": "Физлицо", "selfemployed": "Самозанятый", "ip": "ИП", "llc": "ООО"}
-
-HELP = (
-    "<b>Как пользоваться</b>\n"
-    "Пришлите VIN (17 символов), госномер (А123ВС77) или ссылку на объявление — "
-    "я сделаю бесплатную экспресс-проверку: залог, такси, ЭПТС, ДТП.\n\n"
-    "Подборщикам: пришлите несколько VIN — по одному в строке.\n\n"
-    "/balance — остаток пакета и безлимита\n/history — последние проверки\n"
-    "/tariffs — тарифы и пакеты\n/help — эта справка"
-)
-
-
-def short(check_id: str) -> str:
-    return check_id.replace("-", "")
-
-
-LAMP = {"red": "🔴", "yellow": "🟡", "green": "🟢"}
-
-
-def summary_text(check: Check) -> str:
-    v = check.vehicle or {}
-    head = html.escape(v.get("title") or "Автомобиль") + (f", {v['year']}" if v.get("year") else "")
-    ids = " · ".join(html.escape(str(x)) for x in (v.get("vin"), v.get("plate")) if x)
-    light = traffic_light(check.flags or [])
-    lines = [f"<b>{head}</b>", ids, "",
-             f"{LAMP[light['color']]} <b>{html.escape(light['verdict'])}</b> · {light['score']}/100", ""]
-    for title, key in (("Критично", "red"), ("Внимание", "yellow"), ("В порядке", "green"), ("Нет данных", "na")):
-        if light[key]:
-            lines.append(f"<b>{title}:</b>")
-            lines += [f"{ICONS[f['status']]} {html.escape(f['title'])}: {html.escape(f['summary'])}" for f in light[key]]
-    lines.append(f"\nТариф: «{TIER_TITLES[check.tier]}»")
-    return "\n".join(lines)
+def _kb(rows: list[list[Btn]]) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=b.text, url=b.url) if b.url else InlineKeyboardButton(text=b.text, callback_data=b.data)
+         for b in row] for row in rows])
 
 
 def offer_keyboard(check: Check, user: User, settings: Settings) -> InlineKeyboardMarkup:
-    rows = []
-    sid = short(check.id)
-    if check.tier in ("express", "basic") and can_use_credit(user, "dossier"):
-        label = "безлимит" if has_unlimited(user) else f"осталось {user.credits}"
-        rows.append([InlineKeyboardButton(text=f"📄 «Досье» из пакета ({label})", callback_data=f"credit:{sid}")])
-    order = ["basic", "dossier", "dossier_plus"]
-    for code in order[order.index(check.tier) + 1:] if check.tier in order else order:
-        p = products(settings)[code]
-        rows.append([InlineKeyboardButton(text=f"{p.title} — {p.price} ₽", callback_data=f"buy:{code}:{sid}")])
-    rows.append([InlineKeyboardButton(text="🌐 Открыть отчёт", url=f"{settings.public_base_url.rstrip('/')}/r/{check.id}")]
-                if settings.public_base_url.startswith("https://") else [])
-    return InlineKeyboardMarkup(inline_keyboard=[r for r in rows if r])
+    return _kb(offer_buttons(check, user, settings))
 
 
 def packs_keyboard(settings: Settings) -> InlineKeyboardMarkup:
-    ps = products(settings)
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"{ps[c].title} — {ps[c].price} ₽", callback_data=f"buy:{c}:-")]
-        for c in ("pack_10", "pack_25", "pack_50", "unlimited_day")])
-
-
-def balance_text(user: User, free_left: int) -> str:
-    parts = [f"Отчётов «Досье» в пакете: <b>{user.credits}</b>"]
-    if has_unlimited(user):
-        until = user.unlimited_until.replace(tzinfo=timezone.utc).astimezone().strftime("%d.%m %H:%M")
-        parts.append(f"Безлимит активен до <b>{until}</b>")
-    parts.append(f"Бесплатных экспресс-проверок сегодня: <b>{free_left}</b>")
-    return "\n".join(parts)
+    return _kb(packs_buttons(settings))
 
 
 async def send_report(message: Message, service: CheckService, check: Check) -> None:
-    base = f"{(check.vehicle or {}).get('title', 'auto')}-{check.vin or short(check.id)[:8]}-{TIER_TITLES[check.tier]}"
-    base = base.replace(" ", "_")
-    try:
-        doc = BufferedInputFile(await service.pdf(check), filename=f"{base}.pdf")
-    except (OSError, ImportError) as e:
-        # Нет системных библиотек WeasyPrint (типично для Windows без GTK) — отдаём HTML-отчёт,
-        # он открывается в браузере и печатается в PDF через Ctrl+P.
-        log.warning("PDF не собран (%s), отправляю HTML", e.__class__.__name__)
-        doc = BufferedInputFile(service.html(check).encode("utf-8"), filename=f"{base}.html")
-    await message.answer_document(doc, caption=summary_text(check)[:1024])
+    name, data = await report_file(service, check)
+    await message.answer_document(BufferedInputFile(data, filename=name), caption=summary_text(check)[:1024])
 
 
 # ---------- команды ----------
@@ -163,9 +103,7 @@ async def cmd_help(message: Message) -> None:
 
 @router.message(Command("tariffs"))
 async def cmd_tariffs(message: Message, settings: Settings) -> None:
-    lines = ["<b>Тарифы</b>", "Экспресс — 0 ₽: залог, такси, ЭПТС, архив ДТП"]
-    lines += [f"{p.title} — {p.price} ₽: {html.escape(p.description)}" for p in products(settings).values()]
-    await message.answer("\n".join(lines), reply_markup=packs_keyboard(settings))
+    await message.answer(tariffs_text(settings), reply_markup=packs_keyboard(settings))
 
 
 @router.message(Command("balance"))

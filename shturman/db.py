@@ -64,6 +64,22 @@ class Payment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class Order(Base):
+    """Счёт на оплату во внешней платёжке (Robokassa). id используется как InvId."""
+    __tablename__ = "orders"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    product: Mapped[str] = mapped_column(String(32))
+    check_id: Mapped[str | None] = mapped_column(ForeignKey("checks.id"))
+    amount_rub: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)  # pending | paid | failed
+    platform: Mapped[str] = mapped_column(String(16))  # max | telegram | web
+    chat_id: Mapped[int | None] = mapped_column(BigInteger)  # куда доставить результат
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+
+
 class CacheEntry(Base):
     __tablename__ = "provider_cache"
     key: Mapped[str] = mapped_column(String(128), primary_key=True)

@@ -254,7 +254,7 @@
     <nav aria-label="Разделы">
       <a href="#light">Светофор</a><a href="#checks">Что проверяем</a><a href="#report">Отчёт</a><a href="#plans">Тарифы</a><a href="#pro">Подборщикам</a><a href="#faq">Вопросы</a>
     </nav>
-    {% if bot_link %}<a class="btn btn-amber" href="{{ bot_link }}"><span class="long">Открыть в&nbsp;</span>Telegram</a>{% else %}<a class="btn btn-amber" href="#top">Проверить авто</a>{% endif %}
+    {% if bot_link %}<a class="btn btn-amber" href="{{ bot_link }}"><span class="long">Открыть в&nbsp;</span>{{ messenger }}</a>{% else %}<a class="btn btn-amber" href="#top">Проверить авто</a>{% endif %}
   </div>
 </header>
 
@@ -453,9 +453,9 @@
   <div class="wrap">
     <div class="head reveal"><div><span class="eyebrow">Как это работает</span><h2>Три шага до решения</h2></div></div>
     <div class="steps">
-      <div class="card step reveal"><h3>Введите VIN, госномер или ссылку</h3><p>На сайте или в Telegram. Госномер можно латиницей или кириллицей, ссылку — прямо из объявления.</p></div>
+      <div class="card step reveal"><h3>Введите VIN, госномер или ссылку</h3><p>На сайте или в {{ messenger }}. Госномер можно латиницей или кириллицей, ссылку — прямо из объявления.</p></div>
       <div class="card step reveal"><h3>Получите экспресс-сигнал</h3><p>Бесплатно и за секунды: залог, такси, ЭПТС, ДТП. Уже видно, стоит ли ехать на осмотр.</p></div>
-      <div class="card step reveal"><h3>Откройте полный отчёт</h3><p>Оплата в Telegram (карта, СБП) — PDF со светофором придёт через пару минут.</p></div>
+      <div class="card step reveal"><h3>Откройте полный отчёт</h3><p>Оплата в боте картой или через СБП — PDF со светофором придёт через пару минут.</p></div>
     </div>
   </div>
 </section>
@@ -474,15 +474,15 @@
       {% set p = products['basic'] %}
       <div class="card plan reveal"><h3>{{ p.title }}</h3><div class="price">{{ p.price }} <small>₽</small></div><p>Юридическая проверка перед осмотром.</p>
         <ul><li>Всё из «Экспресс»</li><li>Ограничения и розыск</li><li>Штрафы ГИБДД</li><li>Пробег и техосмотры</li><li>Техданные и оценка цены</li></ul>
-        <a class="btn btn-ghost" href="{{ bot_link or '#top' }}">Купить в Telegram</a></div>
+        <a class="btn btn-ghost" href="{{ bot_link or '#top' }}">Купить в {{ messenger }}</a></div>
       {% set p = products['dossier'] %}
       <div class="card plan hot reveal"><span class="badge">Оптимально</span><h3>{{ p.title }}</h3><div class="price">{{ p.price }} <small>₽</small></div><p>Полная история перед сделкой.</p>
         <ul><li>Всё из «Базового»</li><li>Владельцы и госномера</li><li>История ОСАГО, объявления</li><li>Лизинг, суды, таможня</li><li>Фото и плюсы/минусы модели</li></ul>
-        <a class="btn btn-amber" href="{{ bot_link or '#top' }}">Купить в Telegram</a></div>
+        <a class="btn btn-amber" href="{{ bot_link or '#top' }}">Купить в {{ messenger }}</a></div>
       {% set p = products['dossier_plus'] %}
       <div class="card plan reveal"><h3>{{ p.title }}</h3><div class="price">{{ p.price }} <small>₽</small></div><p>Максимум для дорогой машины.</p>
         <ul><li>Всё из «Досье»</li><li>ДТП по базе ГИБДД онлайн</li><li>Сервисная история</li><li>Детектор скрутки по 3 источникам</li></ul>
-        <a class="btn btn-ghost" href="{{ bot_link or '#top' }}">Купить в Telegram</a></div>
+        <a class="btn btn-ghost" href="{{ bot_link or '#top' }}">Купить в {{ messenger }}</a></div>
     </div>
     <p class="plans-note">Дорогие проверки (лизинг, суды, таможня, каршеринг) запускаются только когда к ним есть повод — поэтому полный отчёт стоит дешевле, чем набор проверок по отдельности.</p>
   </div>
@@ -494,7 +494,7 @@
     <div class="pro reveal">
       <span class="eyebrow">Автоподборщикам</span>
       <h2>Проверяйте десятки машин в день — без лишних кликов</h2>
-      <p class="lead">Пакеты дешевле разовых отчётов, безлимит на день активных просмотров и проверка списком прямо в Telegram.</p>
+      <p class="lead">Пакеты дешевле разовых отчётов, безлимит на день активных просмотров и проверка списком прямо в {{ messenger }}.</p>
       <div class="pro-grid">
         <div>
           <div class="packs">
@@ -545,7 +545,7 @@
       <details><summary>Что делать, если горит красный?</summary><p>Красный означает юридический риск: залог, розыск, ограничения или действующий лизинг. Не передавайте деньги, пока продавец не снимет обременение, и проконсультируйтесь с юристом.</p></details>
       <details><summary>Можно проверить по ссылке на объявление?</summary><p>Да, если в ссылке есть VIN или госномер. Если нет — скопируйте VIN из объявления и вставьте в форму.</p></details>
       <details><summary>Как быстро готов отчёт?</summary><p>Экспресс — несколько секунд. Полный — обычно до двух минут: проверка ДТП по базе ГИБДД в реальном времени иногда занимает дольше.</p></details>
-      <details><summary>Как оплатить?</summary><p>В Telegram-боте: картой или через СБП. Для ИП и ООО — по счёту.</p></details>
+      <details><summary>Как оплатить?</summary><p>В боте {{ messenger }}: картой или через СБП, оплата проходит через Робокассу. Для ИП и ООО — по счёту.</p></details>
       <details><summary>Почему в отчёте бывает «нет данных»?</summary><p>Иногда государственный источник временно недоступен. Мы не выдаём это за «чисто» — раздел помечается, а светофор строится только по реально полученным данным.</p></details>
     </div>
   </div>
@@ -558,8 +558,8 @@
       <div><h2>Проверьте машину до того, как отдать деньги</h2><p>Первая проверка — бесплатно и без регистрации.</p></div>
       <div class="btns">
         <a class="btn btn-dark" href="#top" id="toForm">Проверить бесплатно</a>
-        {% if bot_link %}<a class="btn btn-ghost" href="{{ bot_link }}">Открыть в Telegram</a>{% endif %}
-        {% if max_link %}<a class="btn btn-ghost" href="{{ max_link }}">Открыть в MAX</a>{% else %}<span style="text-align:center;font-size:14px">Бот в MAX — скоро</span>{% endif %}
+        {% if bot_link %}<a class="btn btn-ghost" href="{{ bot_link }}">Открыть в {{ messenger }}</a>{% endif %}
+        {% if max_link and messenger != 'MAX' %}<a class="btn btn-ghost" href="{{ max_link }}">Открыть в MAX</a>{% endif %}
       </div>
     </div>
   </div>
@@ -596,7 +596,7 @@
           <div class="sc">${L.score}<small>из 100</small></div></div>
         <div class="flags">${flags}</div>
         <div class="actions">
-          ${data.buy_url ? `<a class="btn btn-amber" href="${esc(data.buy_url)}">Полный отчёт в Telegram</a>` : ''}
+          ${data.buy_url ? `<a class="btn btn-amber" href="${esc(data.buy_url)}">Полный отчёт в ${esc(data.messenger)}</a>` : ''}
           <a class="btn btn-ghost" href="${esc(data.report_url)}" target="_blank" rel="noopener">Экспресс-отчёт</a>
         </div>
         <div class="hint">${data.offers.map(o => `${esc(o.title)} — ${o.price} ₽`).join(' · ')}. Бесплатных проверок сегодня осталось: ${data.free_left}.</div>

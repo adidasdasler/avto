@@ -1,4 +1,4 @@
-# Штурман Авто — MVP (лендинг + Telegram-бот)
+# Штурман Авто — MVP (лендинг + боты MAX и Telegram)
 
 Проверка автомобиля по VIN, госномеру или ссылке на объявление на данных API
 [avtovincod.ru](https://avtovincod.ru). Реализует этап 1–2 спецификации «Штурман Авто — спецификация MVP»:
@@ -69,6 +69,26 @@ pytest
 `shturman/redaction.py` удаляет поля с ПДн (ФИО, дата рождения, паспорт, телефоны, e-mail,
 залогодатель, должник…) и маскирует ФИО/телефоны/e-mail в тексте **до** записи в кэш и БД.
 Хостинг — VPS в РФ (152-ФЗ).
+
+## MAX-бот и оплата через Robokassa
+
+```bash
+python -m shturman.bot.max
+```
+
+Сценарий тот же, что в Telegram: `/start` → роль → VIN/госномер/ссылка → экспресс-результат со светофором →
+кнопка тарифа → ссылка на оплату Robokassa (карта, СБП) → отчёт PDF приходит в чат
+(на Windows без GTK — HTML). Подборщики могут прислать список VIN, команды `/balance`, `/history`,
+`/tariffs`, `/help`. Клиент MAX Bot API — `shturman/bot/max_api.py` (сверен с SDK maxapi 1.2.4).
+
+Оплата подтверждается двумя путями (`shturman/orders.py`):
+1. **Уведомление Robokassa** на `https://<ваш-домен>/pay/robokassa/result` (Result URL в ЛК, метод POST) —
+   нужен публичный сервер. Success URL — `/pay/robokassa/success`, Fail URL — `/pay/robokassa/fail`.
+2. **Опрос статуса счёта** (OpStateExt) каждые 15 с, а также по кнопке «Я оплатил — проверить» —
+   работает и на домашнем компьютере, без публичного адреса (`ROBOKASSA_POLL_STATUS=true`).
+
+Чек по 54-ФЗ передаётся в параметре `Receipt` (`ROBOKASSA_RECEIPT=true`), для самозанятых —
+подключите «Робочеки» в ЛК. Для разработки без платёжки: `DEV_FAKE_PAYMENTS=true`.
 
 ## Telegram-бот
 

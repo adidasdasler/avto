@@ -33,7 +33,24 @@ class Settings(BaseSettings):
     # Только для разработки: «оплата» без платёжного провайдера
     dev_fake_payments: bool = False
 
+    # MAX
+    max_bot_token: str = ""
+    # Ссылка на бота, например https://max.ru/shturman_bot (для кнопок на сайте)
     max_bot_url: str = ""
+    max_api_url: str = "https://platform-api2.max.ru"
+
+    # Robokassa
+    robokassa_login: str = ""
+    robokassa_password1: str = ""
+    robokassa_password2: str = ""
+    robokassa_test: bool = True
+    robokassa_hash: str = "md5"  # как выбрано в ЛК: md5 / sha256 / sha512 ...
+    # Чек по 54-ФЗ (для самозанятых — «Робочеки»): передавать Receipt в ссылке
+    robokassa_receipt: bool = True
+    robokassa_sno: str = ""  # система налогообложения; пусто — как в ЛК
+    robokassa_tax: str = "none"
+    # Проверять статус счёта запросом OpStateExt (работает без публичного сервера для ResultURL)
+    robokassa_poll_status: bool = True
     # За обратным прокси (nginx) брать IP клиента из X-Forwarded-For
     trust_proxy_headers: bool = False
 

@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import parse_qs
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel, Field
 
@@ -18,6 +19,7 @@ from ..identifiers import IdentifierError
 from ..provider import Provider, make_provider
 from ..provider.methods import METHODS
 from ..rules import traffic_light
+from ..orders import OrderService, make_robokassa
 from ..services import CheckService, LimitExceeded
 
 LANDING_DIR = Path(__file__).resolve().parents[2] / "landing"
@@ -36,6 +38,7 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         await db.create_all()
         prov = provider or make_provider(settings)
         app.state.service = CheckService(db, prov, settings)
+        app.state.orders = OrderService(db, settings, make_robokassa(settings))
         yield
         await prov.aclose()
         await db.dispose()
@@ -57,7 +60,7 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
     async def landing(request: Request) -> str:
         s = svc(request)
         return landing_env.get_template("index.html").render(
-            brand=settings.brand_name, products=products(settings), bot_link=s.bot_link(),
+            brand=settings.brand_name, products=products(settings), bot_link=s.bot_link(), messenger=s.messenger,
             max_link=settings.max_bot_url or None, free_per_day=settings.free_checks_per_day,
             methods_count=len(METHODS))
 
@@ -82,7 +85,7 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         return {
             "id": c.id, "vehicle": c.vehicle, "overall": c.overall, "flags": c.flags,
             "light": traffic_light(c.flags or []),
-            "report_url": f"/r/{c.id}", "buy_url": s.bot_link(c.id),
+            "report_url": f"/r/{c.id}", "buy_url": s.bot_link(c.id), "messenger": s.messenger,
             "free_left": await s.free_left(client_ip=client_ip(request)),
             "offers": [{"code": p.code, "title": p.title, "price": p.price, "description": p.description}
                        for p in products(settings).values() if p.tier],
@@ -92,6 +95,43 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
     async def example(request: Request) -> str:
         s = svc(request)
         return s.html(await s.example())
+
+    # ---- Robokassa ----
+    async def _rk_params(request: Request) -> dict[str, str]:
+        params = dict(request.query_params)
+        if request.method == "POST":
+            body = (await request.body()).decode("utf-8", "replace")
+            params.update({k: v[-1] for k, v in parse_qs(body).items()})
+        return params
+
+    @app.api_route("/pay/robokassa/result", methods=["GET", "POST"], response_class=PlainTextResponse)
+    async def robokassa_result(request: Request) -> str:
+        orders: OrderService = request.app.state.orders
+        params = await _rk_params(request)
+        if orders.robokassa is None or not orders.robokassa.check_result(params):
+            raise HTTPException(400, "bad sign")
+        inv_id = int(params["InvId"])
+        order = await orders.mark_paid(inv_id, params.get("OutSum"))
+        if order is None:
+            raise HTTPException(400, "unknown order or amount")
+        return f"OK{inv_id}"
+
+    def _pay_page(title: str, text: str) -> str:
+        back = settings.max_bot_url or (f"https://t.me/{settings.telegram_bot_username}" if settings.telegram_bot_username else "/")
+        return (f"<!doctype html><html lang=ru><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+                f"<title>{title}</title><style>body{{font:18px/1.5 system-ui,sans-serif;background:#0b1220;color:#e9eef7;display:grid;"
+                f"place-items:center;min-height:100vh;margin:0;padding:16px}}div{{max-width:460px;text-align:center}}"
+                f"a{{display:inline-block;margin-top:18px;background:#ffb020;color:#2a1d00;padding:12px 20px;border-radius:12px;"
+                f"text-decoration:none;font-weight:600}}</style></head><body><div><h1>{title}</h1><p>{text}</p>"
+                f"<a href='{back}'>Вернуться в бот</a></div></body></html>")
+
+    @app.api_route("/pay/robokassa/success", methods=["GET", "POST"], response_class=HTMLResponse)
+    async def robokassa_success(request: Request) -> str:
+        return _pay_page("Оплата прошла", "Спасибо! Отчёт придёт в бот в течение пары минут.")
+
+    @app.api_route("/pay/robokassa/fail", methods=["GET", "POST"], response_class=HTMLResponse)
+    async def robokassa_fail(request: Request) -> str:
+        return _pay_page("Оплата не прошла", "Деньги не списаны. Попробуйте ещё раз из бота.")
 
     _id_re = re.compile(r"^[0-9a-f-]{36}$")
 

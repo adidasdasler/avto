@@ -38,6 +38,15 @@ class CheckService:
                 await s.commit()
             return user
 
+    async def max_user(self, max_id: int, username: str | None = None) -> User:
+        async with self.db.session() as s:
+            user = (await s.execute(select(User).where(User.max_id == max_id))).scalar_one_or_none()
+            if user is None:
+                user = User(max_id=max_id, username=username)
+                s.add(user)
+                await s.commit()
+            return user
+
     async def update_user(self, user_id: int, **fields: Any) -> User:
         async with self.db.session() as s:
             user = await s.get(User, user_id)
@@ -157,10 +166,19 @@ class CheckService:
 
     # ---- отчёт ----
     def bot_link(self, check_id: str | None = None) -> str | None:
-        if not self.settings.telegram_bot_username:
+        """Ссылка на бота (Telegram, иначе MAX); с check_id — deep-link к этой проверке."""
+        payload = f"chk_{check_id.replace('-', '')}" if check_id else None
+        if self.settings.telegram_bot_username:
+            base = f"https://t.me/{self.settings.telegram_bot_username}"
+        elif self.settings.max_bot_url:
+            base = self.settings.max_bot_url.rstrip("/")
+        else:
             return None
-        base = f"https://t.me/{self.settings.telegram_bot_username}"
-        return f"{base}?start=chk_{check_id.replace('-', '')}" if check_id else base
+        return f"{base}?start={payload}" if payload else base
+
+    @property
+    def messenger(self) -> str:
+        return "Telegram" if self.settings.telegram_bot_username else "MAX"
 
     def html(self, check: Check) -> str:
         view = build_view(check, self.settings.brand_name, self.settings.public_base_url, self.bot_link(check.id))

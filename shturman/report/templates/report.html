@@ -145,7 +145,7 @@
 {% if locked %}
 <section class="locked"><h2><span>Доступно в полном отчёте</span></h2>
   <ul>{% for t, tier_name in locked %}<li>🔒 {{ t }} <span class="muted">— тариф «{{ tier_name }}»</span></li>{% endfor %}</ul>
-  {% if bot_link %}<div class="cta noprint">Получить полный отчёт: <a href="{{ bot_link }}">открыть в Telegram</a></div>{% endif %}
+  {% if bot_link %}<div class="cta noprint">Получить полный отчёт: <a href="{{ bot_link }}">открыть бота</a></div>{% endif %}
 </section>
 {% endif %}
 

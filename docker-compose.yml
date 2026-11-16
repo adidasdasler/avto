@@ -21,8 +21,18 @@ services:
     depends_on: {db: {condition: service_healthy}}
     restart: unless-stopped
 
+  max-bot:
+    build: .
+    command: ["python", "-m", "shturman.bot.max"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://shturman:shturman@db:5432/shturman
+    depends_on: {db: {condition: service_healthy}}
+    restart: unless-stopped
+
   bot:
     build: .
+    profiles: ["telegram"]  # запуск: docker compose --profile telegram up -d
     command: ["python", "-m", "shturman.bot"]
     env_file: .env
     environment:
