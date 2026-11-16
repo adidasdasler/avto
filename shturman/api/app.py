@@ -16,6 +16,7 @@ from ..config import Settings, get_settings
 from ..db import Database
 from ..identifiers import IdentifierError
 from ..provider import Provider, make_provider
+from ..provider.methods import METHODS
 from ..rules import traffic_light
 from ..services import CheckService, LimitExceeded
 
@@ -57,7 +58,8 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         s = svc(request)
         return landing_env.get_template("index.html").render(
             brand=settings.brand_name, products=products(settings), bot_link=s.bot_link(),
-            max_link=settings.max_bot_url or None, free_per_day=settings.free_checks_per_day)
+            max_link=settings.max_bot_url or None, free_per_day=settings.free_checks_per_day,
+            methods_count=len(METHODS))
 
     @app.get("/api/health")
     async def health() -> dict:
