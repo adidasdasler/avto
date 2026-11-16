@@ -1,0 +1,60 @@
+{
+  "success": 1,
+  "query": {
+    "vin": "X7TEST00000000001"
+  },
+  "isLeasing": true,
+  "found": 1,
+  "active": 0,
+  "records": [
+    {
+      "lessee": "Юридическое лицо",
+      "dateStart": "2021-06-01",
+      "dateEnd": "2023-04-10",
+      "contract": {
+        "number": "TEST-0001",
+        "date": "2021-05-28"
+      },
+      "subject": "LADA VESTA",
+      "isSublease": false,
+      "lessors": [
+        {
+          "name": "ООО \"Тестовый лизинг\"",
+          "inn": "0000000000",
+          "ogrn": "0000000000000"
+        }
+      ],
+      "lessees": [
+        {
+          "name": "ООО \"Тестовый лизингополучатель\"",
+          "inn": "0000000001",
+          "ogrn": "0000000000001"
+        }
+      ],
+      "isActive": false,
+      "plannedEnd": "2024-05-28",
+      "stopDate": "2023-04-10",
+      "stopReason": "Исполнение обязательств",
+      "messages": [
+        {
+          "number": "00000001",
+          "date": "2021-06-02",
+          "type": "Заключение договора финансовой аренды (лизинга)"
+        },
+        {
+          "number": "00000002",
+          "date": "2023-04-12",
+          "type": "Прекращение договора финансовой аренды (лизинга)"
+        }
+      ]
+    }
+  ],
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

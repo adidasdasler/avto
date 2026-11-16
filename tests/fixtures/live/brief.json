@@ -1,0 +1,25 @@
+{
+  "success": 1,
+  "query": {
+    "vin": "X7TEST00000000001"
+  },
+  "response": {
+    "vin": "X7TEST00000000001",
+    "regNumber": "Т00***00",
+    "mark_model": "ЛАДА GFL110 LADA VESTA",
+    "year": "2021",
+    "horsepower": "106 л. с.",
+    "engine_type": "Бензиновый",
+    "engine_vol": "1596 куб. см",
+    "wheel_type": "левый руль",
+    "weight": "1230 кг"
+  },
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

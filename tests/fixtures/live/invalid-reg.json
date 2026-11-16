@@ -1,0 +1,15 @@
+{
+  "success": 1,
+  "query": {
+    "plate": "Т000ТТ00"
+  },
+  "found": 1,
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

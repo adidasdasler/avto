@@ -1,0 +1,56 @@
+{
+  "success": 1,
+  "found": 1,
+  "record": {
+    "vin": "X7TEST00000000001",
+    "bodyNumber": "TEST-0000001",
+    "model": "LADA GFL110 LADA VESTA",
+    "year": "2021",
+    "color": "БЕЛЫЙ",
+    "category": "B",
+    "engineVolume": "1596",
+    "powerHp": "106",
+    "powerKwt": "78",
+    "maxWeight": "1670",
+    "weightWithoutLoading": "1230",
+    "recordStatus": "действующая",
+    "lastRegAction": "Изменение собственника",
+    "ownershipPeriods": [
+      {
+        "personType": "Юридическое лицо",
+        "from": "2021-06-01",
+        "to": "2023-04-10"
+      },
+      {
+        "personType": "Физическое лицо",
+        "from": "2023-04-10",
+        "to": null
+      }
+    ]
+  },
+  "restrictions": [
+    {
+      "restriction_name": "Запрет на регистрационные действия",
+      "region": "г. Москва",
+      "organization_name": "Судебный пристав",
+      "reasons": "Документ: 0000 от 01.09.2026",
+      "enforcement_number": "00000/00/00000-ИП",
+      "enforcement_date": "2026-09-01",
+      "osp_address": "Тестовый адрес"
+    }
+  ],
+  "searches": [],
+  "status": {
+    "restricted": true,
+    "wanted": false,
+    "spec_wanted": false
+  },
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

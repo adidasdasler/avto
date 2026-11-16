@@ -1,0 +1,16 @@
+{
+  "success": 1,
+  "status": "pending",
+  "taskId": "TEST-TASK-0001",
+  "pollAfterSec": 2,
+  "etaSec": 2,
+  "maxWaitSec": 60,
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

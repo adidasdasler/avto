@@ -1,0 +1,49 @@
+{
+  "success": 1,
+  "query": {
+    "vin": "X7TEST00000000001"
+  },
+  "found": 1,
+  "active_count": 1,
+  "records": [
+    {
+      "register_date": "2023-04-12",
+      "status": "active",
+      "start_date": "2023-04-12",
+      "end_date": null,
+      "number": "2023-000-000000-000",
+      "pledgor_hidden": 0,
+      "pledgee_hidden": 0,
+      "objects": [
+        "VIN X7TEST00000000001"
+      ],
+      "pledgors": [
+        {
+          "type": "person",
+          "name": "Т***т Т***т Т***ч, 01.01.1990"
+        }
+      ],
+      "pledgees": [
+        {
+          "type": "org",
+          "name": "Тестовый банк (акционерное общество)"
+        }
+      ],
+      "history": [
+        {
+          "date": "12.04.2023",
+          "type": "Возникновение",
+          "number": "2023-000-000000-000/0"
+        }
+      ]
+    }
+  ],
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

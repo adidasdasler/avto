@@ -1,0 +1,29 @@
+{
+  "success": 1,
+  "query": {
+    "vin": "X7TEST00000000001"
+  },
+  "found": 1,
+  "records": [
+    {
+      "date": "2025-09-14",
+      "price": 1150000,
+      "mileage": 52000,
+      "city": "Москва",
+      "url": "https://example.com/avtovincod-test/offer-1",
+      "photos": [
+        "https://example.com/avtovincod-test/photo-1.jpg"
+      ],
+      "match": "vin"
+    }
+  ],
+  "excluded": 1,
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "success": 1,
+  "query": {
+    "vin": "X7TEST00000000001"
+  },
+  "found": true,
+  "price": {
+    "average": 1150000,
+    "min": 900000,
+    "max": 1450000,
+    "count": 1200
+  },
+  "similar": [
+    {
+      "brandModel": "LADA VESTA",
+      "year": 2021,
+      "price": 1150000
+    }
+  ],
+  "dynamics": {
+    "byMonth": {
+      "2026-08": 1160000,
+      "2026-09": 1150000
+    },
+    "byYear": {
+      "2025": 1190000,
+      "2026": 1150000
+    },
+    "countByMonth": {
+      "2026-08": 110,
+      "2026-09": 100
+    },
+    "countByYear": {
+      "2025": 1300,
+      "2026": 1200
+    }
+  },
+  "ads": {
+    "min": {
+      "brandModel": "LADA VESTA",
+      "price": 900000,
+      "year": 2021,
+      "mileage": 120000,
+      "city": "Самара"
+    },
+    "max": {
+      "brandModel": "LADA VESTA",
+      "price": 1450000,
+      "year": 2021,
+      "mileage": 15000,
+      "city": "Москва"
+    },
+    "list": [
+      {
+        "brandModel": "LADA VESTA",
+        "date": "2026-09-30",
+        "city": "Москва",
+        "year": 2021,
+        "price": 1150000,
+        "oldPrice": 1190000,
+        "mileage": 52000,
+        "image": "https://example.com/avtovincod-test/photo-1.jpg"
+      }
+    ]
+  },
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

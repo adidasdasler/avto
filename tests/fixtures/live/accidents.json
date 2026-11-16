@@ -1,0 +1,40 @@
+{
+  "success": 1,
+  "query": {
+    "vin": "X7TEST00000000001"
+  },
+  "archival": true,
+  "dataNote": "Архивные данные, не в реальном времени.",
+  "checkedAt": "2026-10-13 10:00:00",
+  "hasAccidents": true,
+  "found": 1,
+  "records": [
+    {
+      "date": "2024-03-15",
+      "number": "000000000",
+      "type": "Столкновение",
+      "region": "г. Москва",
+      "place": "Москва",
+      "brand": "LADA",
+      "model": "VESTA",
+      "damageState": "Повреждено",
+      "damagePoints": [
+        "01",
+        "02"
+      ],
+      "damageDescription": null,
+      "vehiclesInvolved": 2,
+      "department": null,
+      "damage": null,
+      "source": "official"
+    }
+  ],
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

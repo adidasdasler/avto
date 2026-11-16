@@ -1,0 +1,46 @@
+{
+  "success": 1,
+  "query": {
+    "plate": "Т000ТТ00"
+  },
+  "found": 2,
+  "active": 1,
+  "passes": [
+    {
+      "passNumber": "ТТ 0000000",
+      "series": "ТТ",
+      "number": "0000000",
+      "regNumber": "Т000ТТ00",
+      "zone": "МКАД",
+      "status": "Выдан",
+      "isActive": true,
+      "startDate": "2026-01-01",
+      "endDate": "2026-12-31",
+      "cancelDate": null,
+      "period": "Круглосуточный",
+      "passType": "Постоянный"
+    },
+    {
+      "passNumber": "ТТ 0000001",
+      "series": "ТТ",
+      "number": "0000001",
+      "regNumber": "Т000ТТ00",
+      "zone": "ТТК",
+      "status": "Аннулирован",
+      "isActive": false,
+      "startDate": "2026-01-01",
+      "endDate": "2026-12-31",
+      "cancelDate": "2026-03-15",
+      "period": "Ночной",
+      "passType": "Постоянный"
+    }
+  ],
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}

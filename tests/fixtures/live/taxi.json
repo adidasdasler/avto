@@ -1,0 +1,34 @@
+{
+  "success": 1,
+  "query": {
+    "vin": "X7TEST00000000001"
+  },
+  "isTaxi": true,
+  "found": 1,
+  "records": [
+    {
+      "vin": "X7TEST00000000001",
+      "regNumber": "Т000ТТ00",
+      "regionName": "Москва",
+      "permitNumber": 0,
+      "carLabel": "LADA VESTA",
+      "year": 2021,
+      "color": "Белый",
+      "dateFrom": "2022-01-10",
+      "dateTo": "2027-01-10",
+      "dateFgisAdded": "2022-01-11",
+      "isLiftingDevice": 0,
+      "isActual": 1,
+      "source": "fgis",
+      "carriers": []
+    }
+  ],
+  "testMode": true,
+  "billing": {
+    "charged": 0,
+    "currency": "RUB",
+    "billed": false,
+    "balance": 0,
+    "requestId": null
+  }
+}
