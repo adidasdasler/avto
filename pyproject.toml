@@ -27,7 +27,7 @@ build-backend = "setuptools.build_meta"
 include = ["shturman*"]
 
 [tool.setuptools.package-data]
-shturman = ["report/templates/*.html"]
+shturman = ["report/templates/*.html", "provider/samples/*.json"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
