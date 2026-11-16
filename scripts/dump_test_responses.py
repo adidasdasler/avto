@@ -2,7 +2,7 @@
 в tests/fixtures/live/<method>.json — чтобы сверить разбор полей в shturman/normalize.py,
 shturman/rules.py и шаблоне отчёта с реальной схемой.
 
-    AVC_TOKEN=... python scripts/dump_test_responses.py
+    python scripts/dump_test_responses.py   # токен берётся из .env (AVC_TOKEN)
 """
 import asyncio
 import json
@@ -12,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from shturman.config import get_settings  # noqa: E402
 from shturman.provider import AvtovincodClient, ProviderError  # noqa: E402
 from shturman.provider.methods import METHODS, TEST_VALUES  # noqa: E402
 
@@ -19,11 +20,12 @@ OUT = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "live"
 
 
 async def main() -> None:
-    token = os.environ.get("AVC_TOKEN")
+    settings = get_settings()  # читает .env
+    token = os.environ.get("AVC_TOKEN") or settings.avc_token
     if not token:
-        raise SystemExit("Задайте AVC_TOKEN")
+        raise SystemExit("Задайте AVC_TOKEN в файле .env")
     OUT.mkdir(parents=True, exist_ok=True)
-    client = AvtovincodClient(token, os.environ.get("AVC_BASE_URL", "https://api.avtovincod.ru"))
+    client = AvtovincodClient(token, settings.avc_base_url)
     try:
         for name, spec in METHODS.items():
             param = spec.params[0]
@@ -36,7 +38,7 @@ async def main() -> None:
                 status = "ok" if res.test_mode else "ok (НЕ тестовый режим!)"
             except ProviderError as e:
                 body, status = {"error": e.code, "message": e.message}, f"ошибка {e.code}"
-            (OUT / f"{name}.json").write_text(json.dumps(body, ensure_ascii=False, indent=2))
+            (OUT / f"{name}.json").write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
             print(f"{name:15} {params} -> {status}")
     finally:
         await client.aclose()
