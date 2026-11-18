@@ -19,6 +19,7 @@ from typing import Any, Protocol
 
 import httpx
 
+from ..net import ssl_context
 from .methods import METHODS
 
 
@@ -115,6 +116,7 @@ class AvtovincodClient:
             headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             timeout=timeout,
             transport=transport,
+            verify=ssl_context(),
         )
         self._limiter = RateLimiter(rate_per_minute)
 

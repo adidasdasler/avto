@@ -9,7 +9,7 @@ from shturman.bot.max_api import MaxAPI, MaxError, keyboard
 from shturman.orders import OrderService
 from shturman.payments.robokassa import OpState, Robokassa
 
-API = "https://platform-api2.max.ru"
+API = "https://platform-api.max.ru"
 
 
 def test_keyboard_format():

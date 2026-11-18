@@ -19,6 +19,8 @@ from urllib.parse import quote, urlencode
 
 import httpx
 
+from ..net import ssl_context
+
 PAY_URL = "https://auth.robokassa.ru/Merchant/Index.aspx"
 OPSTATE_URL = "https://auth.robokassa.ru/Merchant/WebService/Service.asmx/OpStateExt"
 _NS = {"ns": "http://merchant.roboxchange.com/WebService/"}
@@ -116,7 +118,7 @@ class Robokassa:
     async def op_state(self, inv_id: int) -> OpState:
         data = {"MerchantLogin": self.login, "InvoiceID": inv_id,
                 "Signature": self._hash(self.login, inv_id, self.password2)}
-        async with httpx.AsyncClient(timeout=20, transport=self._transport) as http:
+        async with httpx.AsyncClient(timeout=20, transport=self._transport, verify=ssl_context()) as http:
             resp = await http.post(OPSTATE_URL, data=data)
         return parse_op_state(resp.text)
 

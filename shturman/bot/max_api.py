@@ -1,7 +1,7 @@
 """Тонкий HTTP-клиент MAX Bot API.
 
 Протокол сверён с исходниками официально рекомендованного Python-SDK maxapi (1.2.4):
-- базовый адрес https://platform-api2.max.ru, токен в заголовке Authorization без «Bearer»;
+- базовый адрес https://platform-api.max.ru (в SDK — platform-api2.max.ru), токен в заголовке Authorization без «Bearer»;
 - GET /updates?marker=&timeout=&limit= → {"updates": [...], "marker": N} (long polling, до 90 с);
 - POST /messages?chat_id=|user_id= с телом {text, format: "html", attachments: [...]};
   инлайн-клавиатура — вложение {"type": "inline_keyboard", "payload": {"buttons": [[...]]}},
@@ -22,6 +22,7 @@ from typing import Any
 
 import httpx
 
+from ..net import ssl_context
 from .common import Btn
 
 log = logging.getLogger(__name__)
@@ -43,12 +44,13 @@ def keyboard(rows: list[list[Btn]]) -> dict[str, Any]:
 
 
 class MaxAPI:
-    def __init__(self, token: str, base_url: str = "https://platform-api2.max.ru",
+    def __init__(self, token: str, base_url: str = "https://platform-api.max.ru",
                  transport: httpx.AsyncBaseTransport | None = None, proxy: str | None = None):
         if not token:
             raise MaxError("NO_TOKEN", "Не задан MAX_BOT_TOKEN")
         self._http = httpx.AsyncClient(base_url=base_url.rstrip("/"), headers={"Authorization": token},
-                                       timeout=httpx.Timeout(120, connect=15), transport=transport, proxy=proxy)
+                                       timeout=httpx.Timeout(120, connect=15), transport=transport, proxy=proxy,
+                                       verify=ssl_context())
 
     async def aclose(self) -> None:
         await self._http.aclose()

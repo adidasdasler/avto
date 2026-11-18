@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     max_bot_token: str = ""
     # Ссылка на бота, например https://max.ru/shturman_bot (для кнопок на сайте)
     max_bot_url: str = ""
-    max_api_url: str = "https://platform-api2.max.ru"
+    max_api_url: str = "https://platform-api.max.ru"
 
     # Robokassa
     robokassa_login: str = ""
