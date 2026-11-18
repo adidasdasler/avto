@@ -10,6 +10,7 @@ DIR="${DIR:-/opt/shturman}"
 
 [ "$(id -u)" -eq 0 ] || { echo "Запустите от root (sudo -i)"; exit 1; }
 export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a  # не спрашивать о перезапуске служб (Ubuntu 22.04+)
 
 echo "==> Обновление системы и пакеты"
 apt-get update -q
