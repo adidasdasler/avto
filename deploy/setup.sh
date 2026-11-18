@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Первичная настройка чистого сервера Ubuntu 22.04/24.04 под Штурман Авто.
+# Первичная настройка чистого сервера Ubuntu 22.04 или 24.04 под Штурман Авто.
 # Запуск от root:  curl -fsSL https://raw.githubusercontent.com/adidasdasler/avto/claude/wizardly-heisenberg-b4kry4/deploy/setup.sh | bash
 # Скрипт можно запускать повторно — он ничего не ломает.
 set -euo pipefail
@@ -18,12 +18,23 @@ apt-get -y -q upgrade
 apt-get install -y -q ca-certificates curl git ufw openssl cron
 
 echo "==> Docker (из репозитория Ubuntu)"
+apt-get install -y -q software-properties-common
+add-apt-repository -y universe >/dev/null   # docker-compose-v2 на 22.04 лежит в universe
+apt-get update -q
 if ! command -v docker >/dev/null; then
   apt-get install -y -q docker.io
 fi
 if ! docker compose version >/dev/null 2>&1; then
-  apt-get install -y -q docker-compose-v2 || apt-get install -y -q docker-compose-plugin
+  apt-get install -y -q docker-compose-v2 || true
 fi
+if ! docker compose version >/dev/null 2>&1; then
+  echo "==> Пакета docker-compose-v2 нет — ставлю Compose с GitHub"
+  mkdir -p /usr/local/lib/docker/cli-plugins
+  curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-$(uname -m)" \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose
+  chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+fi
+docker compose version
 # Зеркало Docker Hub на случай, если он недоступен из дата-центра
 if [ ! -f /etc/docker/daemon.json ]; then
   mkdir -p /etc/docker
