@@ -1,0 +1,17 @@
+# Caddy сам получает и продлевает сертификат Let's Encrypt для домена.
+# Домен берётся из переменной DOMAIN (.env), по умолчанию vincv.ru.
+
+{$DOMAIN:vincv.ru} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	reverse_proxy api:8000
+}
+
+www.{$DOMAIN:vincv.ru} {
+	redir https://{$DOMAIN:vincv.ru}{uri} permanent
+}

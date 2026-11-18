@@ -105,13 +105,9 @@ TELEGRAM_BOT_TOKEN=... TELEGRAM_BOT_USERNAME=... python -m shturman.bot
 
 ## Деплой
 
-```bash
-cp .env.example .env   # заполнить токены, PUBLIC_BASE_URL
-docker compose up -d --build
-```
-
-Поднимает PostgreSQL, API/лендинг (порт 8000) и бота. Перед API поставьте nginx с TLS
-и `TRUST_PROXY_HEADERS=true`.
+Сервер с доменом vincv.ru: пошагово в [deploy/README.md](deploy/README.md) — DNS, `deploy/setup.sh`
+(Docker, подкачка, файрвол, ежедневная копия базы), `.env`, `docker compose up -d --build`,
+адреса для Robokassa. Caddy сам получает HTTPS-сертификат. Обновление — `deploy/update.sh`.
 
 ## Структура
 
