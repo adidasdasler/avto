@@ -19,8 +19,9 @@ from aiogram.types import (BotCommand, BufferedInputFile, CallbackQuery, InlineK
                            InlineKeyboardMarkup, LabeledPrice, Message, PreCheckoutQuery)
 
 from ..billing import Product, apply_payment, can_use_credit, has_unlimited, products
-from .common import (HELP, ICONS, LEGAL, Btn, balance_text, offer_buttons, packs_buttons, report_file, short,
-                     summary_text, tariffs_text)
+from ..auth import AuthService
+from .common import (HELP, ICONS, LEGAL, LOGIN_CONFIRM, LOGIN_DONE, LOGIN_EXPIRED, Btn, balance_text, cabinet_message,
+                     offer_buttons, packs_buttons, report_file, short, site_name, summary_text, tariffs_text)
 from ..cascade import TIER_TITLES
 from ..config import Settings
 from ..db import Check, User
@@ -54,6 +55,10 @@ async def send_report(message: Message, service: CheckService, check: Check) -> 
 async def cmd_start(message: Message, command: CommandObject, service: CheckService, settings: Settings) -> None:
     user = await service.tg_user(message.from_user.id, message.from_user.username)
     arg = (command.args or "").strip()
+    if arg.startswith("login_"):
+        await message.answer(LOGIN_CONFIRM.format(site=html.escape(site_name(settings))),
+                             reply_markup=_kb([[Btn("✅ Подтвердить вход", data=f"login:{arg[6:]}")]]))
+        return
     if arg.startswith("chk_"):
         check = await service.find_by_short_id(arg[4:])
         if check:
@@ -94,6 +99,21 @@ async def cb_legal(cq: CallbackQuery, service: CheckService, settings: Settings)
                             reply_markup=packs_keyboard(settings))
     await cq.message.answer("Присылайте VIN — по одному или списком (каждый с новой строки).")
     await cq.answer()
+
+
+@router.callback_query(F.data.startswith("login:"))
+async def cb_login(cq: CallbackQuery, service: CheckService) -> None:
+    user = await service.tg_user(cq.from_user.id)
+    ok = await AuthService(service.db).bind_site_token(cq.data.split(":", 1)[1], user.id)
+    await cq.message.answer(LOGIN_DONE if ok else LOGIN_EXPIRED)
+    await cq.answer()
+
+
+@router.message(Command("cabinet"))
+async def cmd_cabinet(message: Message, service: CheckService, settings: Settings) -> None:
+    user = await service.tg_user(message.from_user.id)
+    text, buttons = cabinet_message(settings, await AuthService(service.db).new_link_token(user.id))
+    await message.answer(text, reply_markup=_kb(buttons) if buttons else None)
 
 
 @router.message(Command("help"))
@@ -306,6 +326,7 @@ async def run_polling(service: CheckService, settings: Settings) -> None:
         BotCommand(command="start", description="Начать"),
         BotCommand(command="balance", description="Баланс и пакеты"),
         BotCommand(command="history", description="История проверок"),
+        BotCommand(command="cabinet", description="Личный кабинет на сайте"),
         BotCommand(command="tariffs", description="Тарифы"),
         BotCommand(command="help", description="Помощь")])
     await dp.start_polling(bot)

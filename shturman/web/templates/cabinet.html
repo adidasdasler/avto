@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Личный кабинет — {{ brand }}{% endblock %}
+{% block head %}<style>
+  .checks .actions { display:flex; flex-wrap:wrap; gap:6px; }
+  .m-only { display:none; }
+  @media (max-width: 640px) {
+    .checks tr.head { display:none; }
+    .checks tr { display:grid; grid-template-columns:1fr auto; gap:6px 10px; padding:14px 0; border-bottom:1px solid var(--line); }
+    .checks td { border:0; padding:0; }
+    .checks td.date { grid-column:1 / -1; color:var(--muted); font-size:13px; }
+    .checks td.tier { display:none; }
+    .checks td.actions { grid-column:1 / -1; }
+    .m-only { display:inline; }
+  }
+</style>{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:end;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+  <div><h1>Личный кабинет</h1><div class="muted">Номер в системе: {{ user.id }}{% if user.role == 'picker' %} · автоподборщик{% endif %}</div></div>
+  <div style="display:flex;gap:8px"><a class="btn amber" href="/#top">Новая проверка</a>
+    <form class="inline" method="post" action="/logout"><button class="btn ghost">Выйти</button></form></div>
+</div>
+
+<div class="grid g3" style="margin-bottom:16px">
+  <div class="card stat"><span class="muted">Отчётов «Досье» в пакете</span><b>{{ user.credits }}</b></div>
+  <div class="card stat"><span class="muted">Безлимит</span><b>{% if unlimited %}до {{ user.unlimited_until.strftime('%d.%m %H:%M') }} UTC{% else %}—{% endif %}</b></div>
+  <div class="card stat"><span class="muted">Бесплатных проверок сегодня</span><b>{{ free_left }}</b></div>
+</div>
+
+{% if payments %}
+<div class="card" style="margin-bottom:24px">
+  <h2>Пакеты и безлимит</h2>
+  <div class="grid g4">
+    {% for p in packs %}
+    <form method="post" action="/cabinet/buy" class="card" style="padding:16px;display:flex;flex-direction:column;gap:6px">
+      <input type="hidden" name="product" value="{{ p.code }}">
+      <b>{{ p.title }}</b><span class="muted" style="font-size:14px">{{ p.description }}</span>
+      <button class="btn sm {{ 'amber' if p.code == 'unlimited_day' else '' }}" style="margin-top:auto">{{ p.price }} ₽</button>
+    </form>
+    {% endfor %}
+  </div>
+  <p class="hint">Оплата картой или через СБП на странице Робокассы. После оплаты вы вернётесь на сайт.</p>
+</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:24px">
+  <h2>Мои проверки</h2>
+  {% if rows %}
+  <table class="checks">
+    <tr class="head"><th>Дата</th><th>Автомобиль</th><th>Сигнал</th><th>Тариф</th><th></th></tr>
+    {% for r in rows %}{% set c = r.c %}
+    <tr>
+      <td class="date" style="white-space:nowrap">{{ c.created_at.strftime('%d.%m.%Y') }}<span class="m-only"> · {{ r.tier }}</span></td>
+      <td><b>{{ (c.vehicle or {}).get('title') or c.query }}</b><div class="hint">{{ c.vin or c.query }}</div></td>
+      <td><span class="pill {{ r.light.color }}">{{ r.light.score }}/100</span></td>
+      <td class="tier">{{ r.tier }}</td>
+      <td class="actions">
+        <a class="btn sm ghost" href="/r/{{ c.id }}" target="_blank" rel="noopener">Открыть</a>
+        <a class="btn sm ghost" href="/r/{{ c.id }}.pdf" target="_blank" rel="noopener">PDF</a>
+        {% if r.credit %}
+          <form class="inline" method="post" action="/cabinet/credit"><input type="hidden" name="check_id" value="{{ c.id }}"><button class="btn sm amber">«Досье» из пакета</button></form>
+        {% elif payments %}
+          {% for p in r.higher %}<form class="inline" method="post" action="/cabinet/buy"><input type="hidden" name="product" value="{{ p.code }}"><input type="hidden" name="check_id" value="{{ c.id }}"><button class="btn sm">{{ p.title }} · {{ p.price }} ₽</button></form>{% endfor %}
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="hint">Отчёты хранятся в кабинете: PDF собирается по последним данным проверки при каждом открытии.</p>
+  {% else %}
+  <p class="muted">Проверок пока нет. Введите VIN или госномер на <a href="/#top">главной</a> — проверка сохранится здесь.</p>
+  {% endif %}
+</div>
+
+<div class="card" style="background:var(--ink);color:var(--on-ink);border-color:transparent">
+  <h2>Вы подборщик, диагност или продаёте авто?</h2>
+  <p style="color:var(--on-ink-muted);margin-top:0">Разместите анкету в каталоге специалистов — покупатели, которые проверяют машины у нас, найдут вас по городу.</p>
+  {% if profile %}
+    <a class="btn amber" href="/cabinet/pro">Моя анкета</a>
+    <span style="margin-left:8px">{% include "_status.html" %}</span>
+  {% else %}<a class="btn amber" href="/cabinet/pro">Разместить анкету</a>{% endif %}
+</div>
+{% endblock %}

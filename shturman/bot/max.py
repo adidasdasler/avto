@@ -20,8 +20,9 @@ from ..db import Check, Order, User
 from ..identifiers import Identifier, IdentifierError, parse_many
 from ..orders import OrderService, PaymentsNotConfigured
 from ..services import CheckService, LimitExceeded
-from .common import (HELP, ICONS, LEGAL, Btn, balance_text, offer_buttons, packs_buttons, report_file, short,
-                     summary_text, tariffs_text)
+from ..auth import AuthService
+from .common import (HELP, ICONS, LEGAL, LOGIN_CONFIRM, LOGIN_DONE, LOGIN_EXPIRED, Btn, balance_text, cabinet_message,
+                     offer_buttons, packs_buttons, report_file, short, site_name, summary_text, tariffs_text)
 from .max_api import MaxAPI, MaxError
 
 log = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ class MaxBot:
         self.payments_interval = payments_interval
         self.marker: int | None = None
         self._deliver_lock = asyncio.Lock()
+        self.auth = AuthService(service.db)
         self._tasks: set[asyncio.Task] = set()
 
     # ---------------------------------------------------------------- отправка
@@ -100,6 +102,10 @@ class MaxBot:
     # ---------------------------------------------------------------- сценарии
     async def on_start(self, ctx: Ctx, payload: str | None) -> None:
         payload = (payload or "").strip()
+        if payload.startswith("login_"):
+            await self.say(ctx, LOGIN_CONFIRM.format(site=html.escape(site_name(self.settings))),
+                           [[Btn("✅ Подтвердить вход", data=f"login:{payload[6:]}")]])
+            return
         if payload.startswith("chk_"):
             check = await self.service.find_by_short_id(payload[4:])
             if check:
@@ -126,6 +132,9 @@ class MaxBot:
             await self.say(ctx, balance_text(user, await self.service.free_left(user=user)))
         elif cmd == "/history":
             await self.history(ctx)
+        elif cmd == "/cabinet":
+            text, buttons = cabinet_message(self.settings, await self.auth.new_link_token(ctx.user.id))
+            await self.say(ctx, text, buttons)
         elif cmd.startswith("/r_"):
             check = await self.service.find_by_short_id(cmd[3:])
             if not check or check.user_id != ctx.user.id:
@@ -234,6 +243,9 @@ class MaxBot:
         elif kind == "buy":
             code, _, sid = rest.partition(":")
             await self.buy(ctx, code, sid)
+        elif kind == "login":
+            ok = await self.auth.bind_site_token(rest, ctx.user.id)
+            await self.say(ctx, LOGIN_DONE if ok else LOGIN_EXPIRED)
         elif kind == "paid":
             await self.check_paid(ctx, int(rest) if rest.isdigit() else 0)
 

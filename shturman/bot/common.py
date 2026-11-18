@@ -24,7 +24,7 @@ HELP = (
     "я сделаю бесплатную экспресс-проверку: залог, такси, ЭПТС, ДТП.\n\n"
     "Подборщикам: пришлите несколько VIN — по одному в строке.\n\n"
     "/balance — остаток пакета и безлимита\n/history — последние проверки\n"
-    "/tariffs — тарифы и пакеты\n/help — эта справка"
+    "/cabinet — вход в личный кабинет на сайте\n/tariffs — тарифы и пакеты\n/help — эта справка"
 )
 
 
@@ -100,3 +100,26 @@ async def report_file(service, check: Check) -> tuple[str, bytes]:
     except (OSError, ImportError) as e:
         log.warning("PDF не собран (%s), отправляю HTML", e.__class__.__name__)
         return f"{base}.html", service.html(check).encode("utf-8")
+
+
+LOGIN_CONFIRM = ("Вход на сайт <b>{site}</b>\n\nПодтвердите, если это вы сейчас входите в личный кабинет. "
+                 "Если вход начинали не вы — ничего не нажимайте.")
+LOGIN_DONE = "Готово ✅ Вернитесь на сайт — кабинет откроется сам."
+LOGIN_EXPIRED = "Ссылка для входа устарела. Обновите страницу входа на сайте и попробуйте снова."
+
+
+def site_name(settings: Settings) -> str:
+    return settings.public_base_url.split("://", 1)[-1].rstrip("/")
+
+
+def cabinet_link(settings: Settings, token: str) -> str:
+    return f"{settings.public_base_url.rstrip('/')}/auth/link?t={token}"
+
+
+def cabinet_message(settings: Settings, token: str) -> tuple[str, list[list[Btn]] | None]:
+    """Ссылка-кнопка (https) или текстом (локальный http — кнопки-ссылки мессенджеры не принимают)."""
+    url = cabinet_link(settings, token)
+    text = "Ссылка для входа в личный кабинет. Действует 10 минут, одноразовая."
+    if url.startswith("https://"):
+        return text, [[Btn("🔐 Открыть кабинет", url=url)]]
+    return f"{text}\n{url}", None

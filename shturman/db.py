@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -78,6 +78,68 @@ class Order(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+
+
+class LoginToken(Base):
+    """Одноразовый токен входа на сайт через бота.
+
+    kind="site": создан страницей /login, бот привязывает его к пользователю после подтверждения;
+    kind="link": создан ботом по команде /cabinet, ведёт сразу в кабинет.
+    """
+    __tablename__ = "login_tokens"
+    token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(8))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class WebSession(Base):
+    __tablename__ = "web_sessions"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+
+class ProProfile(Base):
+    """Анкета специалиста в каталоге: подборщик, выездная диагностика, перекуп."""
+    __tablename__ = "pro_profiles"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    kind: Mapped[str] = mapped_column(String(16))  # selector | inspector | dealer
+    name: Mapped[str] = mapped_column(String(80))
+    city: Mapped[str] = mapped_column(String(60), index=True)
+    about: Mapped[str] = mapped_column(Text, default="")
+    search_text: Mapped[str] = mapped_column(Text, default="")  # имя+о себе+услуги в нижнем регистре
+    services: Mapped[list[Any]] = mapped_column(default=list)  # [{"title": ..., "price": ...}]
+    phone: Mapped[str | None] = mapped_column(String(32))
+    telegram: Mapped[str | None] = mapped_column(String(64))
+    max_link: Mapped[str | None] = mapped_column(String(200))
+    website: Mapped[str | None] = mapped_column(String(200))
+    experience_years: Mapped[int | None] = mapped_column(Integer)
+    # draft | pending (на модерации) | approved | rejected | hidden
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    reject_reason: Mapped[str | None] = mapped_column(String(300))
+    # Задел под монетизацию: тариф анкеты и поднятие в выдаче
+    plan: Mapped[str] = mapped_column(String(16), default="free")  # free | pro
+    featured_until: Mapped[datetime | None] = mapped_column(DateTime)
+    consent_at: Mapped[datetime | None] = mapped_column(DateTime)  # согласие на публикацию контактов
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class ProStat(Base):
+    """Статистика анкеты по дням — основа для будущих платных тарифов."""
+    __tablename__ = "pro_stats"
+    __table_args__ = (UniqueConstraint("profile_id", "day"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("pro_profiles.id"), index=True)
+    day: Mapped[str] = mapped_column(String(10))  # YYYY-MM-DD
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    contacts: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class CacheEntry(Base):

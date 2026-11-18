@@ -1,13 +1,16 @@
 """HTTP API и лендинг (FastAPI)."""
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
-from urllib.parse import parse_qs
+import time
+from urllib.parse import parse_qs, quote
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel, Field
 
@@ -19,9 +22,14 @@ from ..identifiers import IdentifierError
 from ..provider import Provider, make_provider
 from ..provider.methods import METHODS
 from ..rules import traffic_light
+from ..auth import AuthService
+from ..maintenance import cleanup
 from ..orders import OrderService, make_robokassa
+from ..pros import ProService
+from ..web.routes import COOKIE, deliver_web_orders, router as web_router
 from ..services import CheckService, LimitExceeded
 
+log = logging.getLogger(__name__)
 LANDING_DIR = Path(__file__).resolve().parents[2] / "landing"
 
 
@@ -29,7 +37,23 @@ class CheckIn(BaseModel):
     query: str = Field(min_length=3, max_length=512)
 
 
-def create_app(settings: Settings | None = None, provider: Provider | None = None) -> FastAPI:
+async def background(app: FastAPI, interval: float = 15.0) -> None:
+    """Подтверждение оплат с сайта (опрос Robokassa), выполнение веб-заказов, ежедневная очистка."""
+    last_cleanup = 0.0
+    while True:
+        try:
+            await app.state.orders.poll_pending()
+            await deliver_web_orders(app.state.service, app.state.orders)
+            if time.monotonic() - last_cleanup > 24 * 3600:
+                await cleanup(app.state.service.db, app.state.service.settings)
+                last_cleanup = time.monotonic()
+        except Exception:
+            log.exception("background")
+        await asyncio.sleep(interval)
+
+
+def create_app(settings: Settings | None = None, provider: Provider | None = None,
+               run_background: bool = True) -> FastAPI:
     settings = settings or get_settings()
 
     @asynccontextmanager
@@ -39,11 +63,17 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         prov = provider or make_provider(settings)
         app.state.service = CheckService(db, prov, settings)
         app.state.orders = OrderService(db, settings, make_robokassa(settings))
+        app.state.auth = AuthService(db)
+        app.state.pros = ProService(db)
+        bg = asyncio.create_task(background(app)) if run_background else None
         yield
+        if bg:
+            bg.cancel()
         await prov.aclose()
         await db.dispose()
 
     app = FastAPI(title=settings.brand_name, lifespan=lifespan)
+    app.include_router(web_router)
     landing_env = Environment(loader=FileSystemLoader(LANDING_DIR), autoescape=select_autoescape(["html"]))
 
     def svc(request: Request) -> CheckService:
@@ -77,7 +107,8 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
     async def check(body: CheckIn, request: Request) -> dict:
         s = svc(request)
         try:
-            c = await s.express(body.query, client_ip=client_ip(request), source="web")
+            user = await request.app.state.auth.session_user(request.cookies.get(COOKIE))
+            c = await s.express(body.query, user=user, client_ip=client_ip(request), source="web")
         except IdentifierError as e:
             raise HTTPException(422, str(e))
         except LimitExceeded as e:
@@ -86,7 +117,8 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
             "id": c.id, "vehicle": c.vehicle, "overall": c.overall, "flags": c.flags,
             "light": traffic_light(c.flags or []),
             "report_url": f"/r/{c.id}", "buy_url": s.bot_link(c.id), "messenger": s.messenger,
-            "free_left": await s.free_left(client_ip=client_ip(request)),
+            "free_left": await s.free_left(user=user, client_ip=client_ip(request)),
+            "cabinet": bool(user),
             "offers": [{"code": p.code, "title": p.title, "price": p.price, "description": p.description}
                        for p in products(settings).values() if p.tier],
         }
@@ -125,9 +157,21 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
                 f"text-decoration:none;font-weight:600}}</style></head><body><div><h1>{title}</h1><p>{text}</p>"
                 f"<a href='{back}'>Вернуться в бот</a></div></body></html>")
 
-    @app.api_route("/pay/robokassa/success", methods=["GET", "POST"], response_class=HTMLResponse)
-    async def robokassa_success(request: Request) -> str:
-        return _pay_page("Оплата прошла", "Спасибо! Отчёт придёт в бот в течение пары минут.")
+    @app.api_route("/pay/robokassa/success", methods=["GET", "POST"])
+    async def robokassa_success(request: Request):
+        orders: OrderService = request.app.state.orders
+        params = await _rk_params(request)
+        if orders.robokassa and orders.robokassa.check_success(params) and str(params.get("InvId", "")).isdigit():
+            order = await orders.refresh(int(params["InvId"]))
+            if order and order.platform == "web":
+                if order.status == "paid":
+                    await deliver_web_orders(request.app.state.service, orders)
+                    msg = "Оплата получена — отчёт в списке проверок"
+                else:
+                    msg = "Оплата обрабатывается — обновите страницу через минуту"
+                return RedirectResponse("/cabinet?msg=" + quote(msg), status_code=303)
+        return HTMLResponse(_pay_page("Оплата прошла", "Спасибо! Отчёт придёт в бот или появится в личном кабинете "
+                                                          "в течение пары минут."))
 
     @app.api_route("/pay/robokassa/fail", methods=["GET", "POST"], response_class=HTMLResponse)
     async def robokassa_fail(request: Request) -> str:

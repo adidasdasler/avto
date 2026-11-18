@@ -1,0 +1,1 @@
+{% set st = {'pending': ('amber', 'На модерации'), 'approved': ('green', 'Опубликована'), 'rejected': ('red', 'Отклонена'), 'hidden': ('grey', 'Скрыта'), 'draft': ('grey', 'Черновик')} %}{% set s = st.get(profile.status, ('grey', profile.status)) %}<span class="pill {{ s[0] }}">{{ s[1] }}</span>

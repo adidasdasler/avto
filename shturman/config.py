@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     # За обратным прокси (nginx) брать IP клиента из X-Forwarded-For
     trust_proxy_headers: bool = False
 
+    # Личный кабинет и каталог
+    # id пользователей-администраторов (видны в кабинете), через запятую: модерация анкет
+    admin_user_ids: str = ""
+    # анонимные экспресс-проверки с сайта хранятся N дней, проверки пользователей — бессрочно
+    anon_checks_retention_days: int = 30
+
+    @property
+    def admins(self) -> set[int]:
+        return {int(x) for x in self.admin_user_ids.replace(" ", "").split(",") if x.isdigit()}
+
     # Цены, ₽
     price_basic: int = 199
     price_dossier: int = 399

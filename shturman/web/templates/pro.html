@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ p.name }} — {{ kinds[p.kind] }}, {{ p.city }} · {{ brand }}{% endblock %}
+{% block head %}<meta name="description" content="{{ kinds[p.kind] }} в городе {{ p.city }}: {{ p.about[:150] }}">
+{% if p.status != 'approved' %}<meta name="robots" content="noindex">{% endif %}{% endblock %}
+{% block content %}
+<a href="/pros?city={{ p.city|urlencode }}" class="muted">← Все специалисты: {{ p.city }}</a>
+{% if p.status != 'approved' %}<div class="flash" style="margin-top:12px">Анкета не опубликована — её видите только вы и модератор.</div>{% endif %}
+<div class="grid" style="grid-template-columns:1.6fr 1fr;margin-top:14px;align-items:start" id="layout">
+  <div class="card">
+    <div style="display:flex;gap:16px;align-items:center;margin-bottom:12px">
+      <div style="width:64px;height:64px;border-radius:18px;background:var(--ink);color:var(--amber);display:grid;place-items:center;font-weight:800;font-size:28px">{{ p.name[:1]|upper }}</div>
+      <div><h1 style="margin:0">{{ p.name }}</h1><div class="muted">{{ kinds[p.kind] }} · {{ p.city }}{% if p.experience_years %} · опыт {{ p.experience_years }} лет{% endif %}</div></div>
+    </div>
+    {% if p.about %}<p style="white-space:pre-line">{{ p.about }}</p>{% endif %}
+    {% if p.services %}
+    <h2 style="margin-top:22px">Услуги</h2>
+    <table>{% for s in p.services %}<tr><td>{{ s.title }}</td><td style="text-align:right;white-space:nowrap"><b>{{ s.price or '' }}</b></td></tr>{% endfor %}</table>
+    {% endif %}
+  </div>
+  <div class="card" style="position:sticky;top:16px">
+    <h2>Связаться</h2>
+    <div id="contacts"><button class="btn amber" id="show" style="width:100%">Показать контакты</button></div>
+    <p class="hint" style="margin-top:12px">Перед сделкой проверьте машину по VIN — <a href="/">бесплатная экспресс-проверка</a>.</p>
+  </div>
+</div>
+<style>@media (max-width: 760px) { #layout { grid-template-columns:1fr !important; } }</style>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('show').addEventListener('click', async () => {
+  const box = document.getElementById('contacts');
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  try {
+    const r = await fetch('/pros/{{ p.slug }}/contacts', {method: 'POST'});
+    const c = await r.json();
+    const rows = [];
+    if (c.phone) rows.push(`<a class="btn" href="tel:${esc(c.phone)}">${esc(c.phone)}</a>`);
+    if (c.telegram) rows.push(`<a class="btn ghost" href="https://t.me/${esc(c.telegram)}" target="_blank" rel="noopener nofollow">Telegram @${esc(c.telegram)}</a>`);
+    if (c.max_link) rows.push(`<a class="btn ghost" href="${esc(c.max_link)}" target="_blank" rel="noopener nofollow">Написать в MAX</a>`);
+    if (c.website) rows.push(`<a class="btn ghost" href="${esc(c.website)}" target="_blank" rel="noopener nofollow ugc">Сайт</a>`);
+    box.innerHTML = `<div style="display:grid;gap:8px">${rows.join('')}</div>`;
+  } catch (e) { box.textContent = 'Не удалось загрузить контакты, попробуйте ещё раз.'; }
+});
+</script>
+{% endblock %}

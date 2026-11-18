@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Автоподборщики и диагносты{% if city %} — {{ city }}{% endif %} · {{ brand }}{% endblock %}
+{% block head %}<meta name="description" content="Каталог автоподборщиков, выездной диагностики и продавцов автомобилей{% if city %} в городе {{ city }}{% endif %}.">
+<style>
+  .filters { display:grid; grid-template-columns:1.2fr 1fr 1fr auto; gap:10px; align-items:end; margin:22px 0 26px; }
+  @media (max-width: 760px) { .filters { grid-template-columns:1fr 1fr; } .filters .q { grid-column:span 2; } }
+  .pro-card { display:flex; flex-direction:column; gap:10px; text-decoration:none; transition:transform .15s, box-shadow .15s; }
+  .pro-card:hover { transform:translateY(-2px); box-shadow:0 18px 40px -26px rgba(11,18,32,.5); }
+  .pro-card.featured { border-color:var(--amber); box-shadow:0 0 0 1px var(--amber) inset; }
+  .avatar { width:48px; height:48px; border-radius:14px; background:var(--ink); color:var(--amber); display:grid; place-items:center; font-weight:800; font-size:20px; flex:none; }
+  .svc { font-size:14px; color:var(--muted); }
+</style>{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:end;flex-wrap:wrap;gap:12px">
+  <div><h1>Специалисты по подбору и проверке авто</h1>
+    <p class="muted" style="margin:0">Автоподборщики, выездная диагностика и продавцы автомобилей — с контактами и ценами.</p></div>
+  <a class="btn amber" href="/cabinet/pro">Разместить анкету</a>
+</div>
+
+<form class="filters" method="get" action="/pros">
+  <div class="q"><label for="q">Поиск</label><input id="q" type="text" name="q" value="{{ q }}" placeholder="Имя, марка, услуга"></div>
+  <div><label for="city">Город</label>
+    <select id="city" name="city"><option value="">Все города</option>{% for c in cities %}<option {{ 'selected' if c == city }}>{{ c }}</option>{% endfor %}</select></div>
+  <div><label for="kind">Услуги</label>
+    <select id="kind" name="kind"><option value="">Все</option>{% for k, t in kinds.items() %}<option value="{{ k }}" {{ 'selected' if k == kind }}>{{ t }}</option>{% endfor %}</select></div>
+  <button class="btn">Найти</button>
+</form>
+
+{% if items %}
+<div class="grid g3">
+  {% for p in items %}{% set featured = p.featured_until and p.featured_until > now %}
+  <a class="card pro-card {{ 'featured' if featured }}" href="/pros/{{ p.slug }}">
+    <div style="display:flex;gap:12px;align-items:center">
+      <div class="avatar">{{ p.name[:1]|upper }}</div>
+      <div><b>{{ p.name }}</b><div class="muted" style="font-size:14px">{{ kinds[p.kind] }} · {{ p.city }}</div></div>
+    </div>
+    {% if featured %}<span class="pill amber" style="align-self:flex-start">Рекомендуем</span>{% endif %}
+    {% if p.about %}<div style="font-size:15px">{{ p.about[:140] }}{% if p.about|length > 140 %}…{% endif %}</div>{% endif %}
+    {% for s in p.services[:3] %}<div class="svc">{{ s.title }}{% if s.price %} — <b style="color:var(--fg)">{{ s.price }}</b>{% endif %}</div>{% endfor %}
+    {% if p.experience_years %}<div class="svc">Опыт: {{ p.experience_years }} {{ 'год' if p.experience_years % 10 == 1 and p.experience_years % 100 != 11 else ('года' if p.experience_years % 10 in [2,3,4] and p.experience_years % 100 not in [12,13,14] else 'лет') }}</div>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:40px">
+  <h2>{% if city or kind or q %}Никого не нашли{% else %}Каталог только открылся{% endif %}</h2>
+  <p class="muted">Станьте первым специалистом{% if city %} в городе {{ city }}{% endif %} — размещение бесплатное.</p>
+  <a class="btn amber" href="/cabinet/pro">Разместить анкету</a>
+</div>
+{% endif %}
+{% endblock %}

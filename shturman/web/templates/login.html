@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Вход — {{ brand }}{% endblock %}
+{% block content %}
+<div style="max-width:560px;margin:20px auto">
+  <div class="card" style="padding:32px">
+    <h1>Вход в кабинет</h1>
+    <p class="muted">Без паролей: вход подтверждается в нашем боте. Откройте бота, нажмите «Подтвердить вход» — эта страница сама пустит вас в кабинет.</p>
+    {% if links %}
+      <div style="display:grid;gap:10px;margin:22px 0">
+        {% for name, url in links %}<a class="btn {{ 'amber' if loop.first else 'ghost' }}" href="{{ url }}" target="_blank" rel="noopener">Войти через {{ name }}</a>{% endfor %}
+      </div>
+      <p class="muted" id="status" aria-live="polite">Ждём подтверждения в боте…</p>
+      <p class="hint">Уже в боте? Отправьте ему команду <b>/cabinet</b> — придёт ссылка для входа.</p>
+    {% else %}
+      <div class="err">Боты ещё не подключены: укажите MAX_BOT_URL или TELEGRAM_BOT_USERNAME в настройках.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{% if links %}
+<script>
+(() => {
+  const status = document.getElementById('status');
+  const started = Date.now();
+  const tick = async () => {
+    if (Date.now() - started > 10 * 60 * 1000) { status.textContent = 'Время ожидания вышло — обновите страницу.'; return; }
+    try {
+      const r = await fetch('/auth/poll?t={{ token }}', {credentials: 'same-origin'});
+      const d = await r.json();
+      if (d.ok) { status.textContent = 'Вход подтверждён, открываем кабинет…'; location.href = {{ next|tojson }}; return; }
+    } catch (e) {}
+    setTimeout(tick, 2000);
+  };
+  setTimeout(tick, 2000);
+})();
+</script>
+{% endif %}
+{% endblock %}
