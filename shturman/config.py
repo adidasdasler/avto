@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -59,6 +60,20 @@ class Settings(BaseSettings):
     admin_user_ids: str = ""
     # анонимные экспресс-проверки с сайта хранятся N дней, проверки пользователей — бессрочно
     anon_checks_retention_days: int = 30
+
+    @field_validator("avc_token", "max_bot_token", "telegram_bot_token", "telegram_payment_token",
+                     "robokassa_login", "robokassa_password1", "robokassa_password2", mode="before")
+    @classmethod
+    def _clean_secret(cls, v: object, info) -> object:
+        """Токены и пароли: убираем пробелы и кавычки; русские буквы — почти всегда незаменённая заготовка."""
+        if not isinstance(v, str):
+            return v
+        v = v.strip().strip('"').strip("'").strip()
+        if v and not v.isascii():
+            name = info.field_name.upper()
+            raise ValueError(f"{name} содержит русские буквы или спецсимволы — похоже, в .env осталась заготовка "
+                             f"вместо настоящего значения. Скопируйте {name} заново из личного кабинета.")
+        return v
 
     @property
     def admins(self) -> set[int]:

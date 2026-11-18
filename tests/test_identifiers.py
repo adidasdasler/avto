@@ -28,3 +28,13 @@ def test_parse_errors(text):
 def test_parse_many():
     items = parse_many("X7TEST00000000001\nТ000ТТ00; мусор")
     assert [getattr(i, "kind", None) for i in items] == ["vin", "plate", None]
+
+
+def test_settings_reject_placeholder_tokens():
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    from shturman.config import Settings
+    with _pytest.raises(ValidationError, match="AVC_TOKEN содержит русские буквы"):
+        Settings(_env_file=None, avc_token="ваш_токен_avtovincod")
+    assert Settings(_env_file=None, max_bot_token=' "abc123" ').max_bot_token == "abc123"
