@@ -519,19 +519,77 @@ VERDICTS = {
     "green": "Серьёзных рисков не найдено",
     "yellow": "Есть замечания — проверьте перед покупкой",
     "red": "Высокий риск — не покупайте без юридической проверки",
+    "grey": "Нет данных — оценить риски нельзя",
 }
 
+# Сведения о модели, а не о конкретной машине: не подтверждают, что автомобиль есть в реестрах.
+MODEL_LEVEL = {"decode", "price", "pros-cons", "recalls"}
+# Без этих проверок «зелёный» выдавать нельзя: это главные юридические риски.
+KEY_CHECKS = {"pledge", "score", "score-body"}
 
-def traffic_light(flags: list[dict[str, Any]]) -> dict[str, Any]:
+
+def _has_records(method: str, data: dict[str, Any]) -> bool:
+    if method in ("vin", "score", "score-body"):
+        return bool(data.get("record"))
+    if method in ("gos2vin", "vin2gos"):
+        return bool(data.get("vin") or data.get("licensePlate"))
+    if method == "brief":
+        return bool(data.get("response"))
+    if method == "elpts":
+        return bool(data.get("found")) and bool(n.records(data))
+    if method == "sharing":
+        return bool(data.get("isCarsharing"))
+    if method == "nomerogram":
+        return bool(data.get("photos") or n.records(data))
+    if method == "plate-history":
+        return bool(data.get("plates") or n.records(data))
+    if method in ("osago", "osago-history"):
+        return bool(_list(data, "policies", "records"))
+    if method == "lawsuits":
+        return bool(_list(data, "items", "records"))
+    return n.count(data) > 0
+
+
+def data_presence(sections: dict[str, dict[str, Any]] | None) -> dict[str, bool]:
+    """identified — модель распознана; found — хоть один реестр знает этот автомобиль."""
+    sections = sections or {}
+    found = any(_has_records(m, s["data"]) for m, s in sections.items()
+                if m not in MODEL_LEVEL and isinstance(s, dict) and isinstance(s.get("data"), dict))
+    decoded = bool(dig(sections, "decode.data.variants.0"))
+    return {"identified": decoded or found, "found": found}
+
+
+def traffic_light(flags: list[dict[str, Any]], sections: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Светофор по разделам. sections (данные проверки) нужны, чтобы не выдать «зелёный»
+    автомобилю, о котором в реестрах нет ни одной записи."""
     red = [f for f in flags if f["status"] == "bad"]
     yellow = [f for f in flags if f["status"] == "warn"]
     green = [f for f in flags if f["status"] == "ok"]
     na = [f for f in flags if f["status"] == "na"]
-    score = max(0, 100 - sum(int(f.get("weight", WEIGHTS.get(f["status"], 0))) for f in flags))
+    checked = len(flags) - len(na)
+    score: int | None = max(0, 100 - sum(int(f.get("weight", WEIGHTS.get(f["status"], 0))) for f in flags))
     color = "red" if red else "yellow" if yellow else "green"
-    return {"color": color, "score": score, "verdict": VERDICTS[color], "red": red, "yellow": yellow,
-            "green": green, "na": na, "checked": len(flags) - len(na)}
+    verdict = VERDICTS[color]
+
+    presence = data_presence(sections) if sections is not None else {"identified": True, "found": True}
+    if not red:
+        if checked == 0:
+            color, score, verdict = "grey", None, "Источники не ответили — повторите проверку позже"
+        elif not presence["found"]:
+            color, score = "grey", None
+            verdict = ("Записей об автомобиле в реестрах не найдено — оценить риски нельзя"
+                       if presence["identified"] else "Автомобиль не найден — проверьте VIN или госномер")
+        else:
+            missing = [f["title"] for f in na if f["method"] in KEY_CHECKS]
+            if missing:
+                yellow = yellow + [{"method": "incomplete", "status": "warn", "weight": 0,
+                                    "title": "Не все проверки выполнены",
+                                    "summary": "не ответили: " + ", ".join(missing)}]
+                if color == "green":
+                    color, verdict = "yellow", "Проверка неполная — главные реестры не ответили"
+    return {"color": color, "score": score, "verdict": verdict, "red": red, "yellow": yellow,
+            "green": green, "na": na, "checked": checked, "found": presence["found"]}
 
 
-def overall(flags: list[dict[str, Any]]) -> str:
-    return {"red": "bad", "yellow": "warn", "green": "ok"}[traffic_light(flags)["color"]]
+def overall(flags: list[dict[str, Any]], sections: dict[str, dict[str, Any]] | None = None) -> str:
+    return {"red": "bad", "yellow": "warn", "green": "ok", "grey": "unknown"}[traffic_light(flags, sections)["color"]]

@@ -73,4 +73,41 @@ def test_active_leasing_is_red():
 def test_error_section():
     s = analyze("taxi", {"error": "метод не подключён к токену"})
     assert s.status == "na"
-    assert traffic_light([s.flag()])["color"] == "green"
+    light = traffic_light([s.flag()])
+    assert light["color"] == "grey" and light["score"] is None  # ни один источник не ответил
+
+
+EMPTY = {"pledge": {"data": {"found": 0, "active_count": 0, "records": []}},
+         "taxi": {"data": {"isTaxi": False, "found": 0, "records": []}},
+         "elpts": {"data": {"found": 0, "records": []}},
+         "accidents": {"data": {"found": 0, "records": []}}}
+
+
+def test_no_data_is_not_green():
+    light = traffic_light(build_flags(EMPTY), EMPTY)
+    assert light["color"] == "grey" and light["score"] is None
+    assert "не найден" in light["verdict"]
+    # модель распознана по VIN, но в реестрах записей нет — всё равно серый
+    secs = {**EMPTY, "decode": {"data": {"variants": [{"brand": "LADA", "model": "Vesta"}]}},
+            "price": {"data": {"price": {"min": 1, "max": 2}}}}
+    light = traffic_light(build_flags(secs), secs)
+    assert light["color"] == "grey" and "реестрах не найдено" in light["verdict"]
+
+
+def test_registry_record_allows_green():
+    secs = {**EMPTY, "score": {"data": {"record": {"model": "LADA"}, "restrictions": [], "searches": [],
+                                        "status": {"restricted": False, "wanted": False}}}}
+    light = traffic_light(build_flags(secs), secs)
+    assert light["color"] == "green" and light["score"] == 100
+
+
+def test_key_check_failed_caps_at_yellow():
+    secs = {**EMPTY, "elpts": {"data": {"found": 1, "records": [{"restrictions_status": "нет ограничений"}]}},
+            "pledge": {"error": "источник временно недоступен"}}
+    light = traffic_light(build_flags(secs), secs)
+    assert light["color"] == "yellow" and any(f["title"] == "Не все проверки выполнены" for f in light["yellow"])
+
+
+def test_red_wins_even_without_registry_data():
+    secs = {**EMPTY, "pledge": {"data": {"found": 1, "active_count": 1, "records": [{"status": "active"}]}}}
+    assert traffic_light(build_flags(secs), secs)["color"] == "red"

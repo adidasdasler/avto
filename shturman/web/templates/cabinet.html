@@ -51,7 +51,7 @@
     <tr>
       <td class="date" style="white-space:nowrap">{{ c.created_at.strftime('%d.%m.%Y') }}<span class="m-only"> · {{ r.tier }}</span></td>
       <td><b>{{ (c.vehicle or {}).get('title') or c.query }}</b><div class="hint">{{ c.vin or c.query }}</div></td>
-      <td><span class="pill {{ r.light.color }}">{{ r.light.score }}/100</span></td>
+      <td><span class="pill {{ r.light.color }}">{{ r.light.score ~ '/100' if r.light.score is not none else 'нет данных' }}</span></td>
       <td class="tier">{{ r.tier }}</td>
       <td class="actions">
         <a class="btn sm ghost" href="/r/{{ c.id }}" target="_blank" rel="noopener">Открыть</a>

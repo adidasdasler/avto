@@ -20,14 +20,14 @@
 
   /* ---- светофор ---- */
   .light { display:flex; gap:20px; align-items:center; margin:16px 0 8px; padding:16px; border-radius:14px; break-inside: avoid; }
-  .light.red { background:#fdecec; } .light.yellow { background:#fff4dc; } .light.green { background:#e3f4ea; }
+  .light.red { background:#fdecec; } .light.yellow { background:#fff4dc; } .light.green { background:#e3f4ea; } .light.grey { background:#eceef2; }
   .lamp { background:#23262b; border-radius:16px; padding:8px; display:flex; flex-direction:column; gap:7px; flex:none; }
   .lamp i { display:block; width:30px; height:30px; border-radius:50%; opacity:.18; }
   .lamp i.r { background:var(--red); } .lamp i.y { background:#f2b600; } .lamp i.g { background:#2ec26a; }
   .lamp i.on { opacity:1; }
   .verdict { flex:1; }
   .verdict b { display:block; font-size:15pt; line-height:1.2; }
-  .light.red .verdict b { color:#a32020; } .light.yellow .verdict b { color:#8a5a00; } .light.green .verdict b { color:#16743e; }
+  .light.red .verdict b { color:#a32020; } .light.yellow .verdict b { color:#8a5a00; } .light.green .verdict b { color:#16743e; } .light.grey .verdict b { color:#3d4452; }
   .score { text-align:center; flex:none; }
   .score .num { font-size:26pt; font-weight:800; line-height:1; }
   .score .of { font-size:8.5pt; color:var(--muted); }
@@ -75,9 +75,10 @@
   <div class="lamp"><i class="r {{ 'on' if L.color == 'red' }}"></i><i class="y {{ 'on' if L.color == 'yellow' }}"></i><i class="g {{ 'on' if L.color == 'green' }}"></i></div>
   <div class="verdict">
     <b>{{ L.verdict }}</b>
+    {% if L.color == 'grey' %}<span class="muted">Отсутствие записей не означает, что с машиной всё в порядке: проверьте VIN по документам и осмотрите автомобиль.</span><br>{% endif %}
     <span class="muted">Проверено источников: {{ L.checked }}{% if tier != 'dossier_plus' %} — это отчёт «{{ tier_title }}», часть проверок доступна в полном отчёте{% endif %}.</span>
   </div>
-  <div class="score"><div class="num">{{ L.score }}</div><div class="of">из 100</div></div>
+  <div class="score"><div class="num">{{ L.score if L.score is not none else '—' }}</div><div class="of">{{ 'из 100' if L.score is not none else 'нет данных' }}</div></div>
 </div>
 <div class="buckets">
   {% for cls, title, items in [('red', 'Критично', L.red), ('yellow', 'Внимание', L.yellow), ('green', 'В порядке', L.green)] %}

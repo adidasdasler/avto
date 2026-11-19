@@ -94,3 +94,12 @@ async def test_report_pdf(service):
     assert "История пробегов" in html and "Реестр залогов" in html and "Досье+" in html
     pdf = await service.pdf(c)
     assert pdf[:4] == b"%PDF"
+
+
+async def test_unknown_vin_is_grey(db, settings):
+    empty = {m: {"found": 0, "records": []} for m in ("pledge", "taxi", "elpts", "accidents")}
+    svc = CheckService(db, MockProvider(overrides={**empty, "decode": {"found": 0, "variants": []}}), settings,
+                       accidents_poll_interval=0)
+    c = await svc.express("XTA00000000000000", client_ip="5.5.5.5")
+    assert c.overall == "unknown"
+    assert "Автомобиль не найден" in svc.html(c)

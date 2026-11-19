@@ -141,7 +141,7 @@ async def cabinet(request: Request):
     checks = await s.history(user.id, limit=50)
     rows = []
     for c in checks:
-        light = traffic_light(c.flags or [])
+        light = traffic_light(c.flags or [], c.sections)
         higher = [products(s.settings)[t] for t in TIERS[TIERS.index(c.tier) + 1:]]
         rows.append({"c": c, "light": light, "tier": TIER_TITLES[c.tier], "higher": higher,
                      "credit": c.tier in ("express", "basic") and can_use_credit(user, "dossier")})

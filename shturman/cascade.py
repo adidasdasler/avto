@@ -267,4 +267,4 @@ class Cascade:
 
         flags = build_flags(sections)
         return CascadeResult(vin=vin, plate=plate or vehicle.get("plate"), vehicle=vehicle,
-                             sections=sections, flags=flags, overall=overall(flags), cost=cost)
+                             sections=sections, flags=flags, overall=overall(flags, sections), cost=cost)

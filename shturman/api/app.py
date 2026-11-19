@@ -115,7 +115,7 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
             raise HTTPException(429, str(e))
         return {
             "id": c.id, "vehicle": c.vehicle, "overall": c.overall, "flags": c.flags,
-            "light": traffic_light(c.flags or []),
+            "light": traffic_light(c.flags or [], c.sections),
             "report_url": f"/r/{c.id}", "buy_url": s.bot_link(c.id), "messenger": s.messenger,
             "free_left": await s.free_left(user=user, client_ip=client_ip(request)),
             "cabinet": bool(user),

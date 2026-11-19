@@ -75,7 +75,7 @@ def build_view(check: Any, brand: str, public_base_url: str, bot_link: str | Non
             color = {"bad": "#d64545", "warn": "#d08a00"}.get(s.status, "#2e9e5b")
             s.extra["chart"] = mileage_chart(s.extra.get("points") or [], color)
     flags = [s.flag() for s in sections]
-    light = traffic_light(flags)
+    light = traffic_light(flags, sections_data)
     skipped = [(TITLES.get(m, METHODS[m].title), s["skipped"]) for m, s in sections_data.items()
                if "skipped" in s and m in METHODS]
     locked = []

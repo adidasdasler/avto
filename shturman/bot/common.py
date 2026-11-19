@@ -14,8 +14,8 @@ from ..rules import traffic_light
 
 log = logging.getLogger(__name__)
 
-ICONS = {"ok": "✅", "bad": "❌", "warn": "⚠️", "info": "ℹ️", "na": "➖"}
-LAMP = {"red": "🔴", "yellow": "🟡", "green": "🟢"}
+ICONS = {"ok": "✅", "bad": "❌", "warn": "⚠️", "info": "ℹ️", "na": "➖", "unknown": "⚪"}
+LAMP = {"red": "🔴", "yellow": "🟡", "green": "🟢", "grey": "⚪"}
 LEGAL = {"person": "Физлицо", "selfemployed": "Самозанятый", "ip": "ИП", "llc": "ООО"}
 
 HELP = (
@@ -36,9 +36,10 @@ def summary_text(check: Check) -> str:
     v = check.vehicle or {}
     head = html.escape(v.get("title") or "Автомобиль") + (f", {v['year']}" if v.get("year") else "")
     ids = " · ".join(html.escape(str(x)) for x in (v.get("vin"), v.get("plate")) if x)
-    light = traffic_light(check.flags or [])
+    light = traffic_light(check.flags or [], check.sections)
     lines = [f"<b>{head}</b>", ids, "",
-             f"{LAMP[light['color']]} <b>{html.escape(light['verdict'])}</b> · {light['score']}/100", ""]
+             f"{LAMP[light['color']]} <b>{html.escape(light['verdict'])}</b>"
+             + (f" · {light['score']}/100" if light["score"] is not None else ""), ""]
     for title, key in (("Критично", "red"), ("Внимание", "yellow"), ("В порядке", "green"), ("Нет данных", "na")):
         if light[key]:
             lines.append(f"<b>{title}:</b>")
