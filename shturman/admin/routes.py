@@ -14,23 +14,24 @@ import ipaddress
 import logging
 import secrets
 from collections import defaultdict, deque
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import delete
 
 from .. import totp
+from ..billing import products
 from ..cascade import TIER_TITLES
 from ..db import AdminSession, AdminTotpState, utcnow
 from ..maintenance import cleanup
 from ..pros import KINDS
 from ..web.routes import form_data, orders_of, pros_of, svc
-from . import accounts, backups
+from . import accounts, backups, finance
 from .accounts import ROLES, StaffAccount
 from .service import AdminService
 
@@ -86,10 +87,10 @@ def guard(request: Request) -> None:
 
 
 def go(request: Request, path: str = "", msg: str | None = None) -> RedirectResponse:
-    url = A(request) + path
+    url, _, frag = (A(request) + path).partition("#")
     if msg:
         url += ("&" if "?" in url else "?") + "msg=" + quote(msg)
-    return RedirectResponse(url, status_code=303)
+    return RedirectResponse(url + (f"#{frag}" if frag else ""), status_code=303)
 
 
 class Staff:
@@ -423,3 +424,119 @@ async def staff_page(request: Request):
     staff = await require_staff(request)
     return render(request, "staff.html", staff, members=list(accounts_of(request).values()),
                   audit=await admin_of(request).audit_log(200))
+
+
+# ---------------------------------------------------------------- финансы (только администратор)
+def _period(month: str, date_from: str, date_to: str) -> tuple[date, date, str]:
+    try:
+        if date_from and date_to:
+            a, b = date.fromisoformat(date_from), date.fromisoformat(date_to)
+            if b < a:
+                a, b = b, a
+            return a, b + timedelta(days=1), f"{a:%d.%m.%Y} — {b:%d.%m.%Y}"
+        if month:
+            a = date.fromisoformat(month + "-01")
+            return a, finance.add_months(a, 1), finance.month_title(a)
+    except ValueError:
+        pass
+    a = finance.month_start(finance.today_msk())
+    return a, finance.add_months(a, 1), finance.month_title(a)
+
+
+def _chart(series: list) -> dict:
+    """Столбики «выручка» и «чистая прибыль» по месяцам; отрицательная прибыль — вниз от нуля."""
+    hi = max([p.sales for p in series] + [p.net for p in series] + [1])
+    lo = min([p.net for p in series] + [0])
+    h, top = 180, 10
+    scale = (h - top) / (hi - lo)
+    zero = top + hi * scale
+    bars, w = [], 720 / len(series)
+    for i, p in enumerate(series):
+        x = i * w
+        for j, (val, cls) in enumerate([(p.sales, "rev"), (p.net, "net")]):
+            bh = abs(val) * scale
+            bars.append({"x": round(x + w * 0.18 + j * w * 0.33, 1), "w": round(w * 0.3, 1),
+                         "y": round(zero - bh if val >= 0 else zero, 1), "h": round(max(bh, 1), 1),
+                         "cls": cls, "val": val, "month": finance.month_title(p.start)})
+    labels = [{"x": round(i * w + w / 2, 1), "t": f"{finance.MONTHS[p.start.month - 1][:3]}"} for i, p in enumerate(series)]
+    return {"bars": bars, "zero": round(zero, 1), "labels": labels, "h": h + 22}
+
+
+@router.get("/finance", response_class=HTMLResponse)
+async def finance_page(request: Request, month: str = "", date_from: str = "", date_to: str = ""):
+    staff = await require_staff(request, admin=True)
+    start, end, title = _period(month, date_from, date_to)
+    data = await finance.overview(svc(request).db, svc(request).settings, start, end)
+    this = finance.month_start(finance.today_msk())
+    months = [finance.add_months(this, -i) for i in range(0, 18)]
+    return render(request, "finance.html", staff, title=title, start=start, end=end - timedelta(days=1),
+                  month=month, date_from=date_from, date_to=date_to, months=months,
+                  month_title=finance.month_title, chart=_chart(data["series"]),
+                  entries=await finance.entries(svc(request).db), today=finance.today_msk(),
+                  expense_cats=finance.EXPENSE_CATS, income_cats=finance.INCOME_CATS, tax_modes=finance.TAX_MODES,
+                  product_titles={c: p.title for c, p in products(svc(request).settings).items()}, **data)
+
+
+@router.post("/finance/settings")
+async def finance_settings(request: Request):
+    staff = await require_staff(request, admin=True)
+    f = await form_data(request)
+    try:
+        tax_pct = float(f["tax_pct"].replace(",", ".")) if f.get("tax_pct", "").strip() else None
+        await finance.set_config(svc(request).db, float(f.get("acquiring_pct", "0").replace(",", ".")),
+                                 f.get("tax_mode", ""), tax_pct)
+    except (ValueError, KeyError) as e:
+        return go(request, "/finance", f"Не сохранено: {e}")
+    await log_action(request, staff, "finance_settings", None, acquiring=f.get("acquiring_pct"),
+                     tax=f.get("tax_mode"), tax_pct=f.get("tax_pct"))
+    return go(request, "/finance", "Настройки сохранены")
+
+
+@router.post("/finance/entries")
+async def finance_add(request: Request):
+    staff = await require_staff(request, admin=True)
+    f = await form_data(request)
+    kind = "income" if f.get("kind") == "income" else "expense"
+    try:
+        e = await finance.add_entry(
+            svc(request).db, kind=kind, category=f.get("category", ""),
+            amount=float((f.get("amount") or "0").replace(",", ".").replace(" ", "")),
+            spent_on=date.fromisoformat(f.get("spent_on") or finance.today_msk().isoformat()),
+            monthly=f.get("monthly") == "on",
+            until=date.fromisoformat(f["until"] + "-01") if f.get("until") else None,
+            note=f.get("note"), login=staff.login)
+    except ValueError as e:
+        return go(request, "/finance#entries", f"Не добавлено: {e}")
+    await log_action(request, staff, f"finance_{kind}", f"entry:{e.id}", category=e.category,
+                     amount=float(e.amount_rub), monthly=e.monthly or None)
+    return go(request, "/finance#entries", "Добавлено")
+
+
+@router.post("/finance/entries/{entry_id}")
+async def finance_entry(request: Request, entry_id: int):
+    staff = await require_staff(request, admin=True)
+    f = await form_data(request)
+    action = "stop" if f.get("action") == "stop" else "delete"
+    e = await finance.stop_or_delete(svc(request).db, entry_id, action)
+    if e is None:
+        raise HTTPException(404)
+    await log_action(request, staff, f"finance_{action}", f"entry:{entry_id}", category=e.category,
+                     amount=float(e.amount_rub))
+    return go(request, "/finance#entries", "Остановлено с этого месяца" if action == "stop" else "Удалено")
+
+
+@router.get("/finance.csv")
+async def finance_csv(request: Request):
+    staff = await require_staff(request, admin=True)
+    import csv
+    import io
+    this = finance.month_start(finance.today_msk())
+    cfg = await finance.get_config(svc(request).db)
+    all_entries = await finance.entries(svc(request).db, 100_000)
+    series = [await finance.pnl(svc(request).db, svc(request).settings, finance.add_months(this, -i),
+                                finance.add_months(this, -i + 1), cfg, all_entries) for i in range(23, -1, -1)]
+    buf = io.StringIO()
+    csv.writer(buf, delimiter=";").writerows(finance.csv_rows(series))
+    await log_action(request, staff, "finance_export")
+    return Response("\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=pnl.csv", "Cache-Control": "no-store"})

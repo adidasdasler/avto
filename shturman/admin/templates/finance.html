@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Финансы{% endblock %}
+{% macro money(v) %}<i style="font-style:normal;{{ 'color:var(--red)' if v < 0 }}">{{ v|rub }}</i>{% endmacro %}
+{% macro pc(v) %}{{ '—' if v is none else ('%.1f'|format(v)) ~ ' %' }}{% endmacro %}
+{% macro delta(cur, old, good_up=True) %}{% if old %}{% set d = (cur - old) / (old|abs) * 100 %}<i class="hint" style="font-style:normal;color:{{ 'var(--green)' if (d >= 0) == good_up else 'var(--red)' }}">{{ '▲' if d >= 0 else '▼' }} {{ '%.0f'|format(d|abs) }} %</i>{% endif %}{% endmacro %}
+{% block content %}
+<style>
+  .pnl td:nth-child(n+2), .pnl th:nth-child(n+2) { text-align:right; white-space:nowrap; }
+  .pnl tr.sum td { font-weight:700; border-top:2px solid var(--line); }
+  .pnl tr.sub td:first-child { padding-left:22px; color:var(--muted); }
+  .chart .rev { fill:var(--blue); } .chart .net { fill:var(--amber); }
+  .chart rect:hover { opacity:.75; }
+  .legend { display:flex; gap:16px; font-size:13px; color:var(--muted); }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px; }
+  form.period { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+</style>
+<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px">
+  <h1>Финансы · {{ title }}</h1>
+  <a class="btn sm ghost" href="{{ A }}/finance.csv">Выгрузить CSV (24 мес.)</a>
+</div>
+
+<div class="card" style="margin-bottom:14px">
+  <form class="period" method="get" action="{{ A }}/finance">
+    <select name="month" onchange="this.form.date_from.value='';this.form.date_to.value='';this.form.submit()">
+      {% for m in months %}<option value="{{ m.strftime('%Y-%m') }}" {{ 'selected' if start == m and not date_from }}>{{ month_title(m) }}</option>{% endfor %}
+    </select>
+    <span class="hint">или период:</span>
+    <input type="date" name="date_from" value="{{ date_from }}"> — <input type="date" name="date_to" value="{{ date_to }}">
+    <button class="btn sm">Показать</button>
+  </form>
+</div>
+
+<div class="grid g4" style="margin-bottom:14px">
+  <div class="card stat"><span>Выручка</span><b>{{ p.sales|rub }}</b><span>{{ p.payments }} оплат {{ delta(p.sales, prev.sales) }}</span></div>
+  <div class="card stat"><span>Валовая прибыль · маржа</span><b>{{ money(p.gross) }}</b><span>{{ pc(p.pct(p.gross)) }} {{ delta(p.gross, prev.gross) }}</span></div>
+  <div class="card stat"><span>Все расходы</span><b>{{ p.expenses|rub }}</b><span>с налогом {{ delta(p.expenses, prev.expenses, False) }}</span></div>
+  <div class="card stat"><span>Чистая прибыль · маржа</span><b>{{ money(p.net) }}</b><span>{{ pc(p.pct(p.net, p.income)) }} {{ delta(p.net, prev.net) }}</span></div>
+</div>
+<p class="hint" style="margin:-6px 0 14px">Стрелки — сравнение с предыдущим периодом такой же длины.</p>
+
+<div class="grid g2" style="margin-bottom:14px">
+  <div class="card scroll">
+    <h2>Отчёт о прибылях и убытках</h2>
+    <table class="pnl">
+      <tr><th></th><th>₽</th><th>% выручки</th></tr>
+      <tr class="sum"><td>Выручка от продаж</td><td>{{ p.sales|rub }}</td><td>100 %</td></tr>
+      {% for code, (n, total) in p.by_product|dictsort %}<tr class="sub"><td>{{ product_titles.get(code, code) }} × {{ n }}</td><td>{{ total|rub }}</td><td>{{ pc(p.pct(total)) }}</td></tr>{% endfor %}
+      <tr><td>− Эквайринг ({{ cfg.acquiring_pct }} %)</td><td>{{ p.acquiring|rub }}</td><td>{{ pc(p.pct(p.acquiring)) }}</td></tr>
+      <tr><td>− Провайдер: платные отчёты</td><td>{{ p.provider_paid|rub }}</td><td>{{ pc(p.pct(p.provider_paid)) }}</td></tr>
+      <tr class="sum"><td>Валовая прибыль</td><td>{{ money(p.gross) }}</td><td>{{ pc(p.pct(p.gross)) }}</td></tr>
+      {% if p.other_income %}<tr><td>+ Прочие доходы</td><td>{{ p.other_income|rub }}</td><td></td></tr>
+      {% for c, v in p.income_by_cat|dictsort %}<tr class="sub"><td>{{ income_cats.get(c, c) }}</td><td>{{ v|rub }}</td><td></td></tr>{% endfor %}{% endif %}
+      <tr><td>− Провайдер: бесплатные проверки</td><td>{{ p.provider_free|rub }}</td><td>{{ pc(p.pct(p.provider_free)) }}</td></tr>
+      <tr><td>− Операционные расходы</td><td>{{ p.opex|rub }}</td><td>{{ pc(p.pct(p.opex)) }}</td></tr>
+      {% for c, v in p.opex_by_cat|dictsort %}<tr class="sub"><td>{{ expense_cats.get(c, c) }}</td><td>{{ v|rub }}</td><td>{{ pc(p.pct(v)) }}</td></tr>{% endfor %}
+      <tr class="sum"><td>Операционная прибыль</td><td>{{ money(p.operating) }}</td><td>{{ pc(p.pct(p.operating)) }}</td></tr>
+      <tr><td>− Налог: {{ tax_modes[cfg.tax_mode][0] }}{% if cfg.tax_mode != 'none' %} {{ cfg.tax_pct }} %{% endif %}</td><td>{{ p.tax|rub }}</td><td>{{ pc(p.pct(p.tax)) }}</td></tr>
+      <tr class="sum"><td>Чистая прибыль</td><td>{{ money(p.net) }}</td><td>{{ pc(p.pct(p.net)) }}</td></tr>
+    </table>
+    <p class="hint">Кассовый метод: пакет отчётов — выручка в день оплаты. Налог — оценка, без уменьшения на страховые взносы.</p>
+  </div>
+
+  <div class="card">
+    <h2>Юнит-экономика</h2>
+    <table>
+      <tr><td class="muted">Средний чек</td><td>{{ p.avg_check|rub if p.avg_check else '—' }}</td></tr>
+      <tr><td class="muted">Платящих клиентов · новых</td><td>{{ p.paying_users }} · {{ p.new_paying }}</td></tr>
+      <tr><td class="muted">Выручка на платящего (ARPPU)</td><td>{{ p.arppu|rub if p.arppu else '—' }}</td></tr>
+      <tr><td class="muted">Платных отчётов · себестоимость одного</td><td>{{ p.full_checks }} · {{ '%.2f ₽'|format(p.cost_full) if p.cost_full is not none else '—' }}</td></tr>
+      <tr><td class="muted">Бесплатных проверок · стоимость одной</td><td>{{ p.free_checks }} · {{ '%.2f ₽'|format(p.cost_free) if p.cost_free is not none else '—' }}</td></tr>
+      <tr><td class="muted">Новых пользователей · из них заплатили</td><td>{{ p.new_users }} · {{ p.new_users_paid }} ({{ pc(p.conversion) }})</td></tr>
+      <tr><td class="muted">Постоянные расходы в месяц</td><td>{{ fixed|rub }}</td></tr>
+      <tr><td class="muted">Остаётся с одной продажи (после налога)</td><td>{{ unit|rub if unit is not none else '—' }}</td></tr>
+      <tr><td class="muted"><b>Точка безубыточности</b></td><td><b>{{ (breakeven ~ ' продаж в месяц') if breakeven else '—' }}</b></td></tr>
+      <tr><td class="muted">Неизрасходовано в пакетах</td><td>{{ credits_left }} отч. ≈ {{ liability|rub }}</td></tr>
+    </table>
+    <p class="hint">Безубыточность — по марже последних трёх месяцев и ежемесячным расходам. Неизрасходованные отчёты — уже полученные деньги, по которым ещё будут расходы у провайдера.</p>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:14px">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <h2>12 месяцев</h2>
+    <div class="legend"><span><i style="background:var(--blue)"></i>Выручка</span><span><i style="background:var(--amber)"></i>Чистая прибыль</span></div>
+  </div>
+  <svg class="chart" viewBox="0 0 720 {{ chart.h }}" style="width:100%;height:auto" role="img" aria-label="Выручка и чистая прибыль по месяцам">
+    <line x1="0" x2="720" y1="{{ chart.zero }}" y2="{{ chart.zero }}" stroke="var(--line)"/>
+    {% for b in chart.bars %}<rect class="{{ b.cls }}" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="3"><title>{{ b.month }}: {{ 'выручка' if b.cls == 'rev' else 'чистая прибыль' }} {{ b.val|rub }}</title></rect>{% endfor %}
+    {% for l in chart.labels %}<text x="{{ l.x }}" y="{{ chart.h - 4 }}" text-anchor="middle" font-size="12" fill="var(--muted)">{{ l.t }}</text>{% endfor %}
+  </svg>
+  <div class="scroll">
+  <table class="pnl" style="margin-top:10px">
+    <tr><th>Месяц</th><th>Выручка</th><th>Оплат</th><th>Валовая</th><th>Расходы</th><th>Чистая</th><th>Маржа</th></tr>
+    {% for m in series|reverse %}<tr><td><a href="{{ A }}/finance?month={{ m.start.strftime('%Y-%m') }}">{{ month_title(m.start) }}</a></td>
+      <td>{{ m.sales|rub }}</td><td>{{ m.payments }}</td><td>{{ money(m.gross) }}</td><td>{{ m.expenses|rub }}</td>
+      <td>{{ money(m.net) }}</td><td>{{ pc(m.pct(m.net, m.income)) }}</td></tr>{% endfor %}
+  </table>
+  </div>
+</div>
+
+<div class="grid g2" style="margin-bottom:14px" id="entries">
+  <div class="card">
+    <h2>Добавить расход или доход</h2>
+    <form method="post" action="{{ A }}/finance/entries" style="display:grid;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select name="kind" onchange="for (const g of this.form.category.querySelectorAll('optgroup')) g.disabled = g.dataset.kind !== this.value; this.form.category.value = this.form.category.querySelector('optgroup:not([disabled]) option').value">
+          <option value="expense">Расход</option><option value="income">Доход</option></select>
+        <select name="category" style="flex:1">
+          <optgroup label="Расходы" data-kind="expense">{% for k, t in expense_cats.items() %}<option value="{{ k }}">{{ t }}</option>{% endfor %}</optgroup>
+          <optgroup label="Доходы" data-kind="income" disabled>{% for k, t in income_cats.items() %}<option value="{{ k }}">{{ t }}</option>{% endfor %}</optgroup>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input type="text" name="amount" placeholder="Сумма, ₽" inputmode="decimal" required style="width:140px">
+        <input type="date" name="spent_on" value="{{ today.isoformat() }}" required>
+        <input type="text" name="note" placeholder="Комментарий (например, VDS Timeweb)" style="flex:1;min-width:160px">
+      </div>
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="monthly"> Повторять каждый месяц
+        <span class="hint">до</span> <input type="month" name="until" title="Пусто — бессрочно"></label>
+      <button class="btn">Добавить</button>
+    </form>
+    <p class="hint">Пополнение баланса avtovincod.ru сюда не вносите — расход у провайдера считается автоматически по каждому запросу. Комиссия Robokassa тоже считается сама.</p>
+  </div>
+  <div class="card">
+    <h2>Настройки расчёта</h2>
+    <form method="post" action="{{ A }}/finance/settings" style="display:grid;gap:8px">
+      <label>Эквайринг Robokassa, % <input type="text" name="acquiring_pct" value="{{ cfg.acquiring_pct }}" inputmode="decimal" style="width:90px"></label>
+      <label>Налоговый режим
+        <select name="tax_mode" onchange="this.form.tax_pct.value = this.selectedOptions[0].dataset.pct">
+          {% for k, (t, r) in tax_modes.items() %}<option value="{{ k }}" data-pct="{{ r }}" {{ 'selected' if cfg.tax_mode == k }}>{{ t }}</option>{% endfor %}
+        </select></label>
+      <label>Ставка, % <input type="text" name="tax_pct" value="{{ cfg.tax_pct }}" inputmode="decimal" style="width:90px"></label>
+      <button class="btn ghost">Сохранить</button>
+    </form>
+    <p class="hint">Ставку эквайринга смотрите в договоре Robokassa (обычно 3–4 %). В некоторых регионах ставка УСН ниже 6 %. НПД: 4 % с физлиц.</p>
+  </div>
+</div>
+
+<div class="card scroll">
+  <h2>Записи учёта</h2>
+  <table>
+    <tr><th>Дата</th><th>Тип</th><th>Категория</th><th style="text-align:right">Сумма</th><th>Повтор</th><th>Комментарий</th><th>Кто</th><th></th></tr>
+    {% for e in entries %}<tr>
+      <td style="white-space:nowrap">{{ e.spent_on.strftime('%d.%m.%Y') }}</td>
+      <td>{% if e.kind == 'income' %}<span class="pill green">доход</span>{% else %}<span class="pill grey">расход</span>{% endif %}</td>
+      <td>{{ (income_cats if e.kind == 'income' else expense_cats).get(e.category, e.category) }}</td>
+      <td style="text-align:right;white-space:nowrap">{{ e.amount_rub|rub }}</td>
+      <td class="hint">{% if e.monthly %}ежемесячно{% if e.until %} до {{ month_title(e.until)|lower }}{% endif %}{% endif %}</td>
+      <td class="hint">{{ e.note or '' }}</td><td class="hint">{{ e.staff_login or '' }}</td>
+      <td style="white-space:nowrap">
+        {% if e.monthly and not e.until %}<form class="inline" method="post" action="{{ A }}/finance/entries/{{ e.id }}" onsubmit="return confirm('Больше не начислять с этого месяца? Прошлые месяцы останутся.')"><button class="btn sm ghost" name="action" value="stop">Остановить</button></form>{% endif %}
+        <form class="inline" method="post" action="{{ A }}/finance/entries/{{ e.id }}" onsubmit="return confirm('Удалить запись{{ ' — она пропадёт из всех месяцев' if e.monthly }}?')"><button class="btn sm ghost" name="action" value="delete">Удалить</button></form>
+      </td></tr>
+    {% else %}<tr><td colspan="8" class="muted">Пока нет записей. Начните с постоянных: сервер, домен, сервисы.</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -58,7 +58,7 @@
 <aside>
   <div class="logo">{{ brand }} <small>{{ roles[staff.role] }}</small></div>
   {% for href, title, key in [('', 'Сводка', 'g d'), ('/clients', 'Клиенты', 'g c'), ('/orders', 'Заказы', 'g o'),
-                              ('/pros', 'Анкеты', 'g m'), ('/backups', 'Бэкапы', 'g b'), ('/staff', 'Сотрудники', 'g s')] %}
+                              ('/pros', 'Анкеты', 'g m')] + ([('/finance', 'Финансы', 'g f')] if staff.is_admin else []) + [('/backups', 'Бэкапы', 'g b'), ('/staff', 'Сотрудники', 'g s')] %}
   <a class="nav {{ 'on' if path == A ~ href }}" href="{{ A }}{{ href }}">{{ title }} <kbd>{{ key }}</kbd></a>
   {% endfor %}
   <a class="nav" href="/" target="_blank">Открыть сайт ↗</a>
@@ -76,14 +76,14 @@
   <div class="card keys">
     <h2>Горячие клавиши</h2>
     <p><kbd>g</kbd> <kbd>d</kbd> сводка · <kbd>g</kbd> <kbd>c</kbd> клиенты · <kbd>g</kbd> <kbd>o</kbd> заказы</p>
-    <p><kbd>g</kbd> <kbd>m</kbd> анкеты · <kbd>g</kbd> <kbd>b</kbd> бэкапы · <kbd>g</kbd> <kbd>s</kbd> сотрудники</p>
+    <p><kbd>g</kbd> <kbd>m</kbd> анкеты ·{% if staff.is_admin %} <kbd>g</kbd> <kbd>f</kbd> финансы ·{% endif %} <kbd>g</kbd> <kbd>b</kbd> бэкапы · <kbd>g</kbd> <kbd>s</kbd> сотрудники</p>
     <p><kbd>/</kbd> поиск клиента · <kbd>n</kbd> <kbd>b</kbd> создать бэкап · <kbd>?</kbd> эта подсказка · <kbd>Esc</kbd> закрыть</p>
   </div>
 </div>
 <script>
 (() => {
   const A = {{ A|tojson }};
-  const go = {d: A, c: A + '/clients', o: A + '/orders', m: A + '/pros', b: A + '/backups', s: A + '/staff'};
+  const go = {d: A, c: A + '/clients', o: A + '/orders', m: A + '/pros', b: A + '/backups', s: A + '/staff'{% if staff.is_admin %}, f: A + '/finance'{% endif %}};
   let prefix = null, timer = null;
   document.addEventListener('keydown', e => {
     const t = e.target;

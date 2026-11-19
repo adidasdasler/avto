@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy import inspect, text
-from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import JSON, BigInteger, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -231,6 +231,29 @@ class AdminTotpState(Base):
     __tablename__ = "admin_totp_state"
     login: Mapped[str] = mapped_column(String(32), primary_key=True)
     last_counter: Mapped[int] = mapped_column(BigInteger)
+
+
+class Expense(Base):
+    """Ручная запись учёта: расход (сервер, реклама, зарплаты…) или прочий доход. Может повторяться ежемесячно."""
+    __tablename__ = "fin_entries"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(8), default="expense")  # expense | income
+    category: Mapped[str] = mapped_column(String(32))
+    amount_rub: Mapped[float] = mapped_column(Numeric(12, 2))
+    spent_on: Mapped[date] = mapped_column(Date, index=True)  # дата (для ежемесячных — первый платёж)
+    monthly: Mapped[bool] = mapped_column(default=False)
+    until: Mapped[date | None] = mapped_column(Date)  # последний месяц для ежемесячных; пусто — бессрочно
+    note: Mapped[str | None] = mapped_column(String(200))
+    staff_login: Mapped[str | None] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class AppSetting(Base):
+    """Настройки, которые меняются из панели (ставка эквайринга, налоговый режим)."""
+    __tablename__ = "app_settings"
+    key: Mapped[str] = mapped_column(String(48), primary_key=True)
+    value: Mapped[str] = mapped_column(String(200))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class SystemAlert(Base):
