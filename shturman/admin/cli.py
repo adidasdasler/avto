@@ -118,6 +118,14 @@ def panel_url() -> str:
 
 def restart_hint() -> None:
     print(f"\nПрименить: docker compose up -d api\nВход: {panel_url()}")
+    https_hint()
+
+
+def https_hint() -> None:
+    if panel_url().startswith("http://"):
+        print("\n⚠ В .env PUBLIC_BASE_URL начинается с http:// — замените на https://vincv.ru (без / в конце),\n"
+              "  иначе cookie панели и кабинета уходят без флага Secure, а в боте нет кнопки «Открыть отчёт».\n"
+              "  Затем: docker compose up -d")
 
 
 # ---------------------------------------------------------------- команды
@@ -129,6 +137,7 @@ def cmd_init(args) -> None:
     alphabet = string.ascii_lowercase + string.digits
     set_var("ADMIN_PATH", "/ops-" + "".join(secrets.choice(alphabet) for _ in range(16)))
     print(f"Секретный адрес панели: {panel_url()}\nНикому его не пересылайте в открытых чатах.")
+    https_hint()
     if not load():
         print("Теперь добавьте сотрудника: ./deploy/admin.sh add <логин> --role admin")
     restart_hint()
@@ -199,6 +208,7 @@ def cmd_remove(args) -> None:
 def cmd_list(args) -> None:
     accounts = load()
     print(f"Адрес панели: {panel_url()}")
+    https_hint()
     ips = get_var(read_env(), "ADMIN_ALLOWED_IPS")
     print(f"Разрешённые IP: {ips or 'любые (ADMIN_ALLOWED_IPS не задан)'}")
     if not accounts:
