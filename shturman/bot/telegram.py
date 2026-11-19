@@ -20,7 +20,8 @@ from aiogram.types import (BotCommand, BufferedInputFile, CallbackQuery, InlineK
 
 from ..billing import Product, apply_payment, can_use_credit, has_unlimited, products
 from ..auth import AuthService
-from .common import (HELP, ICONS, LEGAL, LOGIN_CONFIRM, LOGIN_DONE, LOGIN_EXPIRED, Btn, balance_text, cabinet_message,
+from .common import (BIND_CONFIRM, BIND_DONE, BIND_EXPIRED, HELP, ICONS, LEGAL, LOGIN_CONFIRM, LOGIN_DONE,
+                     LOGIN_EXPIRED, Btn, balance_text, cabinet_message,
                      offer_buttons, packs_buttons, report_file, short, site_name, summary_text, tariffs_text)
 from ..cascade import TIER_TITLES
 from ..config import Settings
@@ -58,6 +59,16 @@ async def cmd_start(message: Message, command: CommandObject, service: CheckServ
     if arg.startswith("login_"):
         await message.answer(LOGIN_CONFIRM.format(site=html.escape(site_name(settings))),
                              reply_markup=_kb([[Btn("✅ Подтвердить вход", data=f"login:{arg[6:]}")]]))
+        return
+    if arg.startswith("bind_"):
+        target_id = await AuthService(service.db).peek_token(arg[5:], "bind")
+        target = await service.get_user(target_id) if target_id else None
+        if target is None:
+            await message.answer(BIND_EXPIRED)
+            return
+        await message.answer(BIND_CONFIRM.format(messenger="Telegram", account=html.escape(target.email or f"№{target.id}"),
+                                                 site=html.escape(site_name(settings))),
+                             reply_markup=_kb([[Btn("✅ Привязать", data=f"bind:{arg[5:]}")]]))
         return
     if arg.startswith("chk_"):
         check = await service.find_by_short_id(arg[4:])
@@ -106,6 +117,16 @@ async def cb_login(cq: CallbackQuery, service: CheckService) -> None:
     user = await service.tg_user(cq.from_user.id)
     ok = await AuthService(service.db).bind_site_token(cq.data.split(":", 1)[1], user.id)
     await cq.message.answer(LOGIN_DONE if ok else LOGIN_EXPIRED)
+    await cq.answer()
+
+
+@router.callback_query(F.data.startswith("bind:"))
+async def cb_bind(cq: CallbackQuery, service: CheckService) -> None:
+    user = await service.tg_user(cq.from_user.id)
+    target_id = await AuthService(service.db).consume_token(cq.data.split(":", 1)[1], "bind")
+    if target_id:
+        await service.merge_users(target_id, user.id)
+    await cq.message.answer(BIND_DONE if target_id else BIND_EXPIRED)
     await cq.answer()
 
 

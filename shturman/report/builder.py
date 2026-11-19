@@ -63,6 +63,8 @@ def tech_rows(v: dict[str, Any]) -> list[tuple[str, str]]:
         v["engine_volume"] = n.fmt_num(v["engine_volume"], "см³")
     if v.get("power_hp"):
         v["power"] = f"{v['power_hp']} л. с." + (f" / {v['power_kw']} кВт" if v.get("power_kw") else "")
+    if v.get("title") == "Автомобиль":  # модель не распознана — не показываем заглушку
+        v["title"] = None
     return [(label, str(v[key])) for label, key in TECH_FIELDS if v.get(key)]
 
 

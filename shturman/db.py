@@ -1,13 +1,18 @@
 """Модели и подключение к БД. PostgreSQL в проде, SQLite для разработки и тестов."""
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import inspect, text
 from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+log = logging.getLogger(__name__)
 
 
 def utcnow() -> datetime:
@@ -26,6 +31,9 @@ class User(Base):
     username: Mapped[str | None] = mapped_column(String(64))
     role: Mapped[str] = mapped_column(String(16), default="buyer")  # buyer | picker
     legal_status: Mapped[str | None] = mapped_column(String(16))  # person | ip | selfemployed | llc
+    email: Mapped[str | None] = mapped_column(String(254), unique=True, index=True)
+    password_hash: Mapped[str | None] = mapped_column(String(200))
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime)
     credits: Mapped[int] = mapped_column(Integer, default=0)  # отчёты уровня «Досье» из пакетов
     unlimited_until: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -163,6 +171,27 @@ class ProviderLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+def _add_missing_columns(conn) -> None:
+    """Простая миграция для уже созданной базы: досоздаёт новые колонки (всегда допускающие NULL)
+    и их индексы. Данные не трогает; удаление и переименование колонок так не делаются."""
+    insp = inspect(conn)
+    for table in Base.metadata.sorted_tables:
+        if not insp.has_table(table.name):
+            continue
+        existing = {c["name"] for c in insp.get_columns(table.name)}
+        added = set()
+        for col in table.columns:
+            if col.name in existing:
+                continue
+            ddl_type = col.type.compile(dialect=conn.dialect)
+            conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {col.name} {ddl_type}'))
+            added.add(col.name)
+            log.warning("Миграция: добавлена колонка %s.%s", table.name, col.name)
+        for idx in table.indexes:
+            if {c.name for c in idx.columns} & added:
+                idx.create(conn, checkfirst=True)
+
+
 class Database:
     def __init__(self, url: str):
         self.engine: AsyncEngine = create_async_engine(url)
@@ -171,6 +200,7 @@ class Database:
     async def create_all(self) -> None:
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(_add_missing_columns)
 
     async def dispose(self) -> None:
         await self.engine.dispose()

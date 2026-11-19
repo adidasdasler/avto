@@ -36,6 +36,7 @@
   .bucket.red h3 { border-color:var(--red); color:var(--red); }
   .bucket.yellow h3 { border-color:var(--yellow); color:var(--yellow); }
   .bucket.green h3 { border-color:var(--green); color:var(--green); }
+  .bucket.grey h3 { border-color:#8a93a3; color:#5b6372; }
   .bucket div { margin-bottom:6px; font-size:9pt; } .bucket div b { display:block; font-size:9.5pt; }
   .na-line { font-size:8.5pt; color:var(--muted); margin-top:4px; }
 
@@ -81,7 +82,8 @@
   <div class="score"><div class="num">{{ L.score if L.score is not none else '—' }}</div><div class="of">{{ 'из 100' if L.score is not none else 'нет данных' }}</div></div>
 </div>
 <div class="buckets">
-  {% for cls, title, items in [('red', 'Критично', L.red), ('yellow', 'Внимание', L.yellow), ('green', 'В порядке', L.green)] %}
+  {% for cls, title, items in [('red', 'Критично', L.red), ('yellow', 'Внимание', L.yellow),
+       ('grey' if L.color == 'grey' else 'green', 'Записей не найдено' if L.color == 'grey' else 'В порядке', L.green)] %}
   <div class="bucket {{ cls }}"><h3>{{ title }} · {{ items|length }}</h3>
     {% for f in items %}<div><b>{{ f.title }}</b>{{ f.summary }}</div>{% else %}<div class="muted">—</div>{% endfor %}
   </div>

@@ -47,6 +47,46 @@ class CheckService:
                 await s.commit()
             return user
 
+    async def merge_users(self, target_id: int, source_id: int) -> None:
+        """Переносит в target всё из source (проверки, заказы, оплаты, пакеты, анкету, способы входа)
+        и удаляет source. Нужна, когда к кабинету на сайте привязывают аккаунт мессенджера."""
+        if target_id == source_id:
+            return
+        from sqlalchemy import delete as sa_delete, update
+
+        from .db import LoginToken, Order, Payment, ProProfile, ProStat, WebSession
+
+        async with self.db.session() as s:
+            target, source = await s.get(User, target_id), await s.get(User, source_id)
+            if target is None or source is None:
+                return
+            for model in (Check, Order, Payment, WebSession, LoginToken):
+                await s.execute(update(model).where(model.user_id == source_id).values(user_id=target_id))
+            src_profile = (await s.execute(select(ProProfile).where(ProProfile.user_id == source_id))).scalar_one_or_none()
+            if src_profile is not None:
+                has_own = (await s.execute(select(ProProfile.id).where(ProProfile.user_id == target_id))).first()
+                if has_own:  # у кабинета уже есть анкета — анкету второго аккаунта удаляем
+                    await s.execute(sa_delete(ProStat).where(ProStat.profile_id == src_profile.id))
+                    await s.delete(src_profile)
+                else:
+                    src_profile.user_id = target_id
+            target.credits = (target.credits or 0) + (source.credits or 0)
+            if source.unlimited_until and (not target.unlimited_until or source.unlimited_until > target.unlimited_until):
+                target.unlimited_until = source.unlimited_until
+            if source.role == "picker":
+                target.role = "picker"
+            moved = {}
+            for attr in ("max_id", "tg_id", "email", "password_hash", "email_verified_at", "username", "legal_status"):
+                if getattr(target, attr) is None and getattr(source, attr) is not None:
+                    moved[attr] = getattr(source, attr)
+                    setattr(source, attr, None)
+            await s.flush()  # освобождаем уникальные max_id/tg_id/email у source
+            for attr, value in moved.items():
+                setattr(target, attr, value)
+            await s.flush()
+            await s.delete(source)
+            await s.commit()
+
     async def update_user(self, user_id: int, **fields: Any) -> User:
         async with self.db.session() as s:
             user = await s.get(User, user_id)

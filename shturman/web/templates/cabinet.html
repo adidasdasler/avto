@@ -71,6 +71,49 @@
   {% endif %}
 </div>
 
+<div class="card" id="security" style="margin-bottom:24px">
+  <h2>Вход и безопасность</h2>
+  <div class="grid g2" style="align-items:start">
+    <div>
+      <div class="muted" style="font-size:14px">Почта</div>
+      {% if user.email %}
+        <div style="margin:4px 0 8px"><b>{{ user.email }}</b>
+          {% if user.email_verified_at %}<span class="pill green">подтверждена</span>{% else %}<span class="pill amber">не подтверждена</span>{% endif %}</div>
+        {% if not user.email_verified_at and smtp %}
+        <form method="post" action="/cabinet/verify"><button class="btn sm ghost">Отправить письмо ещё раз</button></form>
+        {% endif %}
+      {% else %}
+        <p style="margin:4px 0 0">Не указана. Добавьте почту и пароль, чтобы входить на сайт без мессенджера.</p>
+      {% endif %}
+      <div class="muted" style="font-size:14px;margin-top:16px">Мессенджеры</div>
+      <div style="margin-top:4px">
+        {% if user.max_id %}<span class="pill green">MAX привязан</span>{% endif %}
+        {% if user.tg_id %}<span class="pill green">Telegram привязан</span>{% endif %}
+        {% for name, code in bind %}
+          <form class="inline" method="post" action="/cabinet/bind"><input type="hidden" name="messenger" value="{{ code }}"><button class="btn sm ghost">Привязать {{ name }}</button></form>
+        {% endfor %}
+      </div>
+      {% if bind %}<p class="hint">После привязки проверки, пакеты и оплаты из бота появятся в этом кабинете.</p>{% endif %}
+    </div>
+    <details {{ 'open' if not user.email }}>
+      <summary style="cursor:pointer;font-weight:600">{{ 'Изменить почту или пароль' if user.email else 'Добавить вход по почте' }}</summary>
+      <form method="post" action="/cabinet/credentials">
+        <label for="c-email">Почта</label>
+        <input id="c-email" type="text" inputmode="email" name="email" autocomplete="email" required value="{{ user.email or '' }}">
+        {% if user.password_hash %}
+        <label for="c-current">Текущий пароль</label>
+        <input id="c-current" type="password" name="current" autocomplete="current-password" required>
+        {% endif %}
+        <label for="c-password">{{ 'Новый пароль' if user.password_hash else 'Пароль' }}</label>
+        <input id="c-password" type="password" name="password" autocomplete="new-password" minlength="{{ min_password }}" required>
+        <label for="c-password2">Ещё раз</label>
+        <input id="c-password2" type="password" name="password2" autocomplete="new-password" minlength="{{ min_password }}" required>
+        <button class="btn" style="margin-top:14px">Сохранить</button>
+      </form>
+    </details>
+  </div>
+</div>
+
 <div class="card" style="background:var(--ink);color:var(--on-ink);border-color:transparent">
   <h2>Вы подборщик, диагност или продаёте авто?</h2>
   <p style="color:var(--on-ink-muted);margin-top:0">Разместите анкету в каталоге специалистов — покупатели, которые проверяют машины у нас, найдут вас по городу.</p>

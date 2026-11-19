@@ -1,18 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Вход — {{ brand }}{% endblock %}
 {% block content %}
-<div style="max-width:560px;margin:20px auto">
+<div style="max-width:520px;margin:12px auto">
   <div class="card" style="padding:32px">
     <h1>Вход в кабинет</h1>
-    <p class="muted">Без паролей: вход подтверждается в нашем боте. Откройте бота, нажмите «Подтвердить вход» — эта страница сама пустит вас в кабинет.</p>
+    {% if error %}<div class="err" role="alert">{{ error }}</div>{% endif %}
+
+    <form method="post" action="/login" style="margin-top:8px">
+      <input type="hidden" name="next" value="{{ next }}">
+      <label for="email">Почта</label>
+      <input id="email" type="text" inputmode="email" name="email" autocomplete="email" required value="{{ email }}">
+      <label for="password">Пароль</label>
+      <input id="password" type="password" name="password" autocomplete="current-password" required>
+      <button class="btn amber" style="width:100%;margin-top:18px">Войти</button>
+    </form>
+    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px;font-size:15px">
+      <a href="/register">Регистрация</a><a href="/forgot">Забыли пароль?</a>
+    </div>
+
     {% if links %}
-      <div style="display:grid;gap:10px;margin:22px 0">
-        {% for name, url in links %}<a class="btn {{ 'amber' if loop.first else 'ghost' }}" href="{{ url }}" target="_blank" rel="noopener">Войти через {{ name }}</a>{% endfor %}
-      </div>
-      <p class="muted" id="status" aria-live="polite">Ждём подтверждения в боте…</p>
-      <p class="hint">Уже в боте? Отправьте ему команду <b>/cabinet</b> — придёт ссылка для входа.</p>
-    {% else %}
-      <div class="err">Боты ещё не подключены: укажите MAX_BOT_URL или TELEGRAM_BOT_USERNAME в настройках.</div>
+    <div style="display:flex;align-items:center;gap:12px;margin:26px 0 16px;color:var(--muted);font-size:14px">
+      <span style="flex:1;height:1px;background:var(--line)"></span>или через мессенджер<span style="flex:1;height:1px;background:var(--line)"></span>
+    </div>
+    <div style="display:grid;gap:10px">
+      {% for name, url in links %}<a class="btn ghost" href="{{ url }}" target="_blank" rel="noopener">Войти через {{ name }}</a>{% endfor %}
+    </div>
+    <p class="hint" id="status" aria-live="polite" style="margin-top:12px">Откройте бота и нажмите «Подтвердить вход» — эта страница сама пустит вас в кабинет. Уже в боте? Отправьте ему <b>/cabinet</b>.</p>
     {% endif %}
   </div>
 </div>
@@ -23,8 +36,12 @@
 (() => {
   const status = document.getElementById('status');
   const started = Date.now();
+  let opened = false;
+  document.querySelectorAll('a[href*="start=login_"]').forEach(a => a.addEventListener('click', () => {
+    opened = true; status.textContent = 'Ждём подтверждения в боте…';
+  }));
   const tick = async () => {
-    if (Date.now() - started > 10 * 60 * 1000) { status.textContent = 'Время ожидания вышло — обновите страницу.'; return; }
+    if (Date.now() - started > 10 * 60 * 1000) { if (opened) status.textContent = 'Время ожидания вышло — обновите страницу.'; return; }
     try {
       const r = await fetch('/auth/poll?t={{ token }}', {credentials: 'same-origin'});
       const d = await r.json();

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Восстановление пароля — {{ brand }}{% endblock %}
+{% block content %}
+<div style="max-width:520px;margin:12px auto">
+  <div class="card" style="padding:32px">
+    <h1>Восстановление пароля</h1>
+    {% if error %}<div class="err" role="alert">{{ error }}</div>{% endif %}
+    {% if not smtp %}
+      <p class="muted">Восстановление по почте пока недоступно. Войдите через бота в мессенджере — в кабинете можно задать новый пароль.</p>
+      <a class="btn amber" href="/login">Ко входу</a>
+    {% elif sent %}
+      <p>Если этот адрес зарегистрирован, мы отправили на него ссылку для смены пароля. Ссылка действует 1 час.</p>
+      <p class="hint">Письма нет? Проверьте папку «Спам».</p>
+    {% else %}
+      <p class="muted">Укажите почту — пришлём ссылку для смены пароля.</p>
+      <form method="post" action="/forgot">
+        <label for="email">Почта</label>
+        <input id="email" type="text" inputmode="email" name="email" autocomplete="email" required>
+        <button class="btn amber" style="width:100%;margin-top:18px">Отправить ссылку</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

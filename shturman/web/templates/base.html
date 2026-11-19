@@ -46,7 +46,7 @@
   .pill.red { background:var(--red); } .pill.yellow { background:var(--yellow); } .pill.green { background:var(--green); }
   .pill.grey { background:#8a93a3; } .pill.amber { background:var(--amber); color:var(--amber-ink); }
   label { display:block; font-weight:600; font-size:14px; margin:14px 0 6px; }
-  input[type=text], input[type=tel], input[type=url], input[type=number], select, textarea {
+  input[type=text], input[type=tel], input[type=url], input[type=number], input[type=password], input[type=email], select, textarea {
     width:100%; font:inherit; padding:11px 12px; border-radius:10px; border:1.5px solid var(--line); background:var(--card); color:var(--fg); }
   input:focus, select:focus, textarea:focus { outline:none; border-color:var(--amber); }
   textarea { min-height:110px; resize:vertical; }
@@ -74,7 +74,8 @@
   {% if msg %}<div class="flash">{{ msg }}</div>{% endif %}
   {% block content %}{% endblock %}
 </div></main>
-<footer><div class="wrap">© {{ brand }} · <a href="/">Проверка авто</a> · <a href="/pros">Каталог специалистов</a></div></footer>
+<footer><div class="wrap">© {{ brand }} · <a href="/">Проверка авто</a> · <a href="/pros">Каталог специалистов</a> ·
+  <a href="/offer">Оферта</a> · <a href="/privacy">Персональные данные</a> · <a href="/contacts">Контакты</a></div></footer>
 {% block scripts %}{% endblock %}
 </body>
 </html>

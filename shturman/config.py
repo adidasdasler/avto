@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite+aiosqlite:///./shturman.db"
     public_base_url: str = "http://localhost:8000"
-    brand_name: str = "Штурман Авто"
+    brand_name: str = "VinCv"
 
     # Лимит бесплатных экспресс-проверок в сутки (на пользователя бота / IP лендинга)
     free_checks_per_day: int = 3
@@ -55,6 +55,23 @@ class Settings(BaseSettings):
     # За обратным прокси (nginx) брать IP клиента из X-Forwarded-For
     trust_proxy_headers: bool = False
 
+    # Почта (SMTP) — подтверждение адреса и сброс пароля
+    smtp_host: str = ""
+    smtp_port: int = 465
+    smtp_ssl: bool = True  # 465 — SSL; для 587 поставьте false (STARTTLS)
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""  # например noreply@vincv.ru
+
+    # Реквизиты для оферты, политики и страницы контактов (обязательны для модерации Robokassa)
+    legal_name: str = ""  # ФИО самозанятого / ИП или название организации
+    legal_status: str = ""  # «Плательщик налога на профессиональный доход», «ИП», «ООО»
+    legal_inn: str = ""
+    legal_ogrn: str = ""  # ОГРНИП / ОГРН, если есть
+    legal_address: str = ""
+    contact_email: str = ""
+    contact_phone: str = ""
+
     # Личный кабинет и каталог
     # id пользователей-администраторов (видны в кабинете), через запятую: модерация анкет
     admin_user_ids: str = ""
@@ -62,7 +79,8 @@ class Settings(BaseSettings):
     anon_checks_retention_days: int = 30
 
     @field_validator("avc_token", "max_bot_token", "telegram_bot_token", "telegram_payment_token",
-                     "robokassa_login", "robokassa_password1", "robokassa_password2", mode="before")
+                     "robokassa_login", "robokassa_password1", "robokassa_password2", "smtp_password",
+                     mode="before")
     @classmethod
     def _clean_secret(cls, v: object, info) -> object:
         """Токены и пароли: убираем пробелы и кавычки; русские буквы — почти всегда незаменённая заготовка."""

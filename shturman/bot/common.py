@@ -40,7 +40,8 @@ def summary_text(check: Check) -> str:
     lines = [f"<b>{head}</b>", ids, "",
              f"{LAMP[light['color']]} <b>{html.escape(light['verdict'])}</b>"
              + (f" · {light['score']}/100" if light["score"] is not None else ""), ""]
-    for title, key in (("Критично", "red"), ("Внимание", "yellow"), ("В порядке", "green"), ("Нет данных", "na")):
+    ok_title = "Записей не найдено" if light["color"] == "grey" else "В порядке"
+    for title, key in (("Критично", "red"), ("Внимание", "yellow"), (ok_title, "green"), ("Нет данных", "na")):
         if light[key]:
             lines.append(f"<b>{title}:</b>")
             lines += [f"{ICONS[f['status']]} {html.escape(f['title'])}: {html.escape(f['summary'])}" for f in light[key]]
@@ -106,6 +107,11 @@ async def report_file(service, check: Check) -> tuple[str, bytes]:
 LOGIN_CONFIRM = ("Вход на сайт <b>{site}</b>\n\nПодтвердите, если это вы сейчас входите в личный кабинет. "
                  "Если вход начинали не вы — ничего не нажимайте.")
 LOGIN_DONE = "Готово ✅ Вернитесь на сайт — кабинет откроется сам."
+BIND_CONFIRM = ("Привязать этот аккаунт {messenger} к личному кабинету <b>{account}</b> на сайте {site}?\n\n"
+                "Проверки, пакеты и оплаты из бота перенесутся в кабинет. Если привязку начинали не вы — "
+                "ничего не нажимайте.")
+BIND_DONE = "Готово ✅ Аккаунт привязан к личному кабинету. Обновите страницу кабинета на сайте."
+BIND_EXPIRED = "Ссылка для привязки устарела. Нажмите «Привязать» в кабинете на сайте ещё раз."
 LOGIN_EXPIRED = "Ссылка для входа устарела. Обновите страницу входа на сайте и попробуйте снова."
 
 

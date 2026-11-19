@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Регистрация — {{ brand }}{% endblock %}
+{% block content %}
+<div style="max-width:520px;margin:12px auto">
+  <div class="card" style="padding:32px">
+    <h1>Регистрация</h1>
+    <p class="muted">Проверки и отчёты будут сохраняться в личном кабинете.</p>
+    {% if error %}<div class="err" role="alert">{{ error }}</div>{% endif %}
+    <form method="post" action="/register">
+      <label for="email">Почта</label>
+      <input id="email" type="text" inputmode="email" name="email" autocomplete="email" required value="{{ email }}">
+      <label for="password">Пароль</label>
+      <input id="password" type="password" name="password" autocomplete="new-password" minlength="8" required>
+      <div class="hint">Не короче 8 символов.</div>
+      <label for="password2">Пароль ещё раз</label>
+      <input id="password2" type="password" name="password2" autocomplete="new-password" minlength="8" required>
+      <label style="display:flex;gap:10px;align-items:flex-start;font-weight:400;margin-top:18px">
+        <input type="checkbox" name="consent" required style="margin-top:4px">
+        <span>Согласен на обработку персональных данных в соответствии с <a href="/privacy" target="_blank">политикой</a> и принимаю условия <a href="/offer" target="_blank">оферты</a>.</span>
+      </label>
+      <button class="btn amber" style="width:100%;margin-top:18px">Зарегистрироваться</button>
+    </form>
+    <p style="margin-top:14px;font-size:15px">Уже есть аккаунт? <a href="/login">Войти</a></p>
+  </div>
+</div>
+{% endblock %}

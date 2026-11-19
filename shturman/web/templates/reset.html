@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Новый пароль — {{ brand }}{% endblock %}
+{% block content %}
+<div style="max-width:520px;margin:12px auto">
+  <div class="card" style="padding:32px">
+    <h1>Новый пароль</h1>
+    {% if not valid %}
+      <p class="muted">Ссылка устарела или уже использована.</p>
+      <a class="btn amber" href="/forgot">Запросить новую</a>
+    {% else %}
+      {% if error %}<div class="err" role="alert">{{ error }}</div>{% endif %}
+      <form method="post" action="/reset">
+        <input type="hidden" name="token" value="{{ token }}">
+        <label for="password">Новый пароль</label>
+        <input id="password" type="password" name="password" autocomplete="new-password" minlength="8" required>
+        <label for="password2">Ещё раз</label>
+        <input id="password2" type="password" name="password2" autocomplete="new-password" minlength="8" required>
+        <button class="btn amber" style="width:100%;margin-top:18px">Сохранить</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

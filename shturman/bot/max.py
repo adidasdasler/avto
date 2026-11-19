@@ -21,7 +21,8 @@ from ..identifiers import Identifier, IdentifierError, parse_many
 from ..orders import OrderService, PaymentsNotConfigured
 from ..services import CheckService, LimitExceeded
 from ..auth import AuthService
-from .common import (HELP, ICONS, LEGAL, LOGIN_CONFIRM, LOGIN_DONE, LOGIN_EXPIRED, Btn, balance_text, cabinet_message,
+from .common import (BIND_CONFIRM, BIND_DONE, BIND_EXPIRED, HELP, ICONS, LEGAL, LOGIN_CONFIRM, LOGIN_DONE,
+                     LOGIN_EXPIRED, Btn, balance_text, cabinet_message,
                      offer_buttons, packs_buttons, report_file, short, site_name, summary_text, tariffs_text)
 from .max_api import MaxAPI, MaxError
 
@@ -105,6 +106,16 @@ class MaxBot:
         if payload.startswith("login_"):
             await self.say(ctx, LOGIN_CONFIRM.format(site=html.escape(site_name(self.settings))),
                            [[Btn("✅ Подтвердить вход", data=f"login:{payload[6:]}")]])
+            return
+        if payload.startswith("bind_"):
+            target_id = await self.auth.peek_token(payload[5:], "bind")
+            target = await self.service.get_user(target_id) if target_id else None
+            if target is None:
+                await self.say(ctx, BIND_EXPIRED)
+                return
+            await self.say(ctx, BIND_CONFIRM.format(messenger="MAX", account=html.escape(target.email or f"№{target.id}"),
+                                                    site=html.escape(site_name(self.settings))),
+                           [[Btn("✅ Привязать", data=f"bind:{payload[5:]}")]])
             return
         if payload.startswith("chk_"):
             check = await self.service.find_by_short_id(payload[4:])
@@ -243,6 +254,13 @@ class MaxBot:
         elif kind == "buy":
             code, _, sid = rest.partition(":")
             await self.buy(ctx, code, sid)
+        elif kind == "bind":
+            target_id = await self.auth.consume_token(rest, "bind")
+            if not target_id:
+                await self.say(ctx, BIND_EXPIRED)
+                return
+            await self.service.merge_users(target_id, ctx.user.id)
+            await self.say(ctx, BIND_DONE)
         elif kind == "login":
             ok = await self.auth.bind_site_token(rest, ctx.user.id)
             await self.say(ctx, LOGIN_DONE if ok else LOGIN_EXPIRED)
