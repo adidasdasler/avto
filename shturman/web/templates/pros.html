@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Автоподборщики и диагносты{% if city %} — {{ city }}{% endif %} · {{ brand }}{% endblock %}
-{% block head %}<meta name="description" content="Каталог автоподборщиков, выездной диагностики, продавцов автомобилей и мастеров аварийного вскрытия авто{% if city %} в городе {{ city }}{% endif %}.">
+{% block head %}<meta name="description" content="Каталог автомобильных специалистов: автоподборщики, выездная диагностика, автоюристы, эвакуаторы, вскрытие авто, автосервисы{% if city %} в городе {{ city }}{% endif %}.">
 <style>
   .filters { display:grid; grid-template-columns:1.2fr 1fr 1fr auto; gap:10px; align-items:end; margin:22px 0 26px; }
   @media (max-width: 760px) { .filters { grid-template-columns:1fr 1fr; } .filters .q { grid-column:span 2; } }
@@ -13,7 +13,7 @@
 {% block content %}
 <div style="display:flex;justify-content:space-between;align-items:end;flex-wrap:wrap;gap:12px">
   <div><h1>Специалисты по подбору и проверке авто</h1>
-    <p class="muted" style="margin:0">Автоподборщики, выездная диагностика, продавцы автомобилей и аварийное вскрытие авто — с контактами и ценами.</p></div>
+    <p class="muted" style="margin:0">Автоподборщики, диагностика, автоюристы, эвакуаторы, автосервисы и другие специалисты — с контактами и ценами.</p></div>
   <a class="btn amber" href="/cabinet/pro">Разместить анкету</a>
 </div>
 
@@ -22,7 +22,7 @@
   <div><label for="city">Город</label>
     <select id="city" name="city"><option value="">Все города</option>{% for c in cities %}<option {{ 'selected' if c == city }}>{{ c }}</option>{% endfor %}</select></div>
   <div><label for="kind">Услуги</label>
-    <select id="kind" name="kind"><option value="">Все</option>{% for k, t in kinds.items() %}<option value="{{ k }}" {{ 'selected' if k == kind }}>{{ t }}</option>{% endfor %}</select></div>
+    <select id="kind" name="kind"><option value="">Все</option>{% for g, items in kind_groups.items() %}<optgroup label="{{ g }}">{% for k, t in items.items() %}<option value="{{ k }}" {{ 'selected' if k == kind }}>{{ t }}</option>{% endfor %}</optgroup>{% endfor %}</select></div>
   <button class="btn">Найти</button>
 </form>
 

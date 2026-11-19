@@ -20,7 +20,7 @@ from ..billing import can_use_credit, has_unlimited, products
 from ..cascade import TIER_TITLES, TIERS
 from ..db import Check, Order, ProProfile, User, utcnow
 from ..orders import OrderService, PaymentsNotConfigured
-from ..pros import KINDS, ProForm, ProService, ValidationError
+from ..pros import KIND_GROUPS, KINDS, SENSITIVE_KINDS, ProForm, ProService, ValidationError
 from ..rules import traffic_light
 from ..services import CheckService
 
@@ -71,7 +71,8 @@ async def form_data(request: Request) -> dict[str, str]:
 def render(request: Request, name: str, user: User | None = None, **ctx: Any) -> HTMLResponse:
     s = svc(request).settings
     html = _env.get_template(name).render(brand=s.brand_name, user=user,
-                                          msg=request.query_params.get("msg"), kinds=KINDS, **ctx)
+                                          msg=request.query_params.get("msg"), kinds=KINDS,
+                                          kind_groups=KIND_GROUPS, sensitive_kinds=SENSITIVE_KINDS, **ctx)
     return HTMLResponse(html)
 
 

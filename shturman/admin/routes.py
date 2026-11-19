@@ -29,7 +29,7 @@ from ..billing import products
 from ..cascade import TIER_TITLES
 from ..db import AdminSession, AdminTotpState, utcnow
 from ..maintenance import cleanup
-from ..pros import KINDS
+from ..pros import KINDS, SENSITIVE_KINDS
 from ..web.routes import form_data, orders_of, pros_of, svc
 from . import accounts, backups, finance
 from .accounts import ROLES, StaffAccount
@@ -164,7 +164,7 @@ def fail(request: Request, *keys: str) -> None:
 def render(request: Request, name: str, staff: Staff | None = None, **ctx: Any) -> HTMLResponse:
     s = svc(request).settings
     from ..api.app import payment_warnings
-    html = _env.get_template(name).render(brand=s.brand_name, staff=staff, roles=ROLES, kinds=KINDS, A=A(request),
+    html = _env.get_template(name).render(brand=s.brand_name, staff=staff, roles=ROLES, kinds=KINDS, sensitive_kinds=SENSITIVE_KINDS, A=A(request),
                                           tiers=TIER_TITLES, msg=request.query_params.get("msg"),
                                           warnings=(payment_warnings(s) + config_warnings(s)) if staff else [],
                                           path=request.url.path, **ctx)

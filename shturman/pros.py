@@ -15,12 +15,34 @@ from sqlalchemy import case, func, select
 
 from .db import Database, ProProfile, ProStat, utcnow
 
-KINDS = {
-    "selector": "Автоподборщик",
-    "inspector": "Выездная диагностика",
-    "dealer": "Продажа авто (перекуп)",
-    "unlock": "Аварийное вскрытие авто",
+KIND_GROUPS = {
+    "Покупка и продажа": {
+        "selector": "Автоподборщик",
+        "inspector": "Выездная диагностика",
+        "dealer": "Продажа авто (перекуп)",
+        "appraiser": "Оценка автомобиля",
+        "registration": "Оформление и постановка на учёт",
+        "lawyer": "Автоюрист",
+        "insurance": "Автострахование",
+        "import": "Пригон авто из-за рубежа",
+        "driver": "Перегон автомобилей",
+    },
+    "Помощь на дороге": {
+        "tow": "Эвакуатор",
+        "unlock": "Аварийное вскрытие авто",
+        "keys": "Изготовление автоключей",
+        "mobile_tires": "Выездной шиномонтаж",
+    },
+    "Ремонт и уход": {
+        "service": "Автосервис",
+        "electrician": "Автоэлектрик",
+        "bodywork": "Кузовной ремонт и покраска",
+        "detailing": "Детейлинг и предпродажная подготовка",
+    },
 }
+KINDS = {k: t for group in KIND_GROUPS.values() for k, t in group.items()}
+# доступ к чужой машине: публикуем, только если мастер проверяет документы владельца
+SENSITIVE_KINDS = {"unlock", "keys"}
 
 _TRANSLIT = str.maketrans({
     "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh", "з": "z", "и": "i",

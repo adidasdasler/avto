@@ -126,7 +126,7 @@ class ProProfile(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
     slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    kind: Mapped[str] = mapped_column(String(16))  # selector | inspector | dealer | unlock
+    kind: Mapped[str] = mapped_column(String(16))  # ключ из pros.KINDS
     name: Mapped[str] = mapped_column(String(80))
     city: Mapped[str] = mapped_column(String(60), index=True)
     about: Mapped[str] = mapped_column(Text, default="")

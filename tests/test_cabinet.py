@@ -197,3 +197,16 @@ def test_unlock_kind_in_catalog(settings):
         client.cookies.clear()
         assert "Мастер Ключ" in client.get("/pros?kind=unlock").text
         assert "Мастер Ключ" not in client.get("/pros?kind=selector").text
+
+
+def test_all_kinds_listed_and_keys_sensitive(settings):
+    from shturman.pros import KIND_GROUPS, KINDS, SENSITIVE_KINDS
+    assert all(len(k) <= 16 for k in KINDS) and SENSITIVE_KINDS <= set(KINDS)
+    assert sum(len(g) for g in KIND_GROUPS.values()) == len(KINDS)
+    with make_client(settings) as client:
+        page = client.get("/pros").text
+        for title in ("Эвакуатор", "Автоюрист", "Изготовление автоключей", "Детейлинг и предпродажная подготовка"):
+            assert title in page
+        assert '<optgroup label="Помощь на дороге">' in page
+        login_as(client, max_id=301)
+        assert 'data-sensitive="keys unlock"' in client.get("/cabinet/pro").text
