@@ -16,10 +16,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import httpx
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 
 from .config import Settings
-from .db import Database, ProviderLog, SystemAlert, User, utcnow
+from .db import Database, ProviderLog, SystemAlert, utcnow
 from .net import ssl_context
 from .provider import Provider, ProviderError
 from .provider.methods import TEST_VALUES
@@ -116,32 +116,33 @@ async def recent(db: Database, hours: int = 24) -> list[SystemAlert]:
         return list(rows.scalars())
 
 
+def _ids(value: str) -> list[int]:
+    return [int(x) for x in (value or "").replace(" ", "").split(",") if x.lstrip("-").isdigit()]
+
+
 async def notify_staff(db: Database, settings: Settings, alerts: list[Alert],
                        transport: httpx.AsyncBaseTransport | None = None) -> int:
-    """Личные сообщения сотрудникам (поддержка и администраторы) в MAX и Telegram."""
+    """Личные сообщения сотрудникам: ALERT_MAX_USER_IDS (MAX) и ALERT_TG_CHAT_IDS (Telegram) из .env."""
     if not alerts:
         return 0
-    async with db.session() as s:
-        staff = list((await s.execute(select(User).where(
-            User.blocked_at.is_(None),
-            or_(User.staff_role.in_(["support", "admin"]), User.id.in_(settings.admins or {-1}))))).scalars())
     text = "\n\n".join(("🚨 " if a.level == "critical" else "⚠️ ") + a.text for a in alerts)
     text = f"<b>{settings.brand_name}: тревога</b>\n\n{text}"
     sent = 0
     async with httpx.AsyncClient(timeout=15, verify=ssl_context(), transport=transport) as http:
-        for u in staff:
+        targets = ([("max", i) for i in _ids(settings.alert_max_user_ids)] if settings.max_bot_token else []) + \
+                  ([("tg", i) for i in _ids(settings.alert_tg_chat_ids)] if settings.telegram_bot_token else [])
+        for kind, ident in targets:
             try:
-                if u.max_id and settings.max_bot_token:
-                    r = await http.post(settings.max_api_url.rstrip("/") + "/messages", params={"user_id": u.max_id},
+                if kind == "max":
+                    r = await http.post(settings.max_api_url.rstrip("/") + "/messages", params={"user_id": ident},
                                         headers={"Authorization": settings.max_bot_token},
                                         json={"text": text[:4000], "format": "html"})
-                    sent += r.status_code < 400
-                if u.tg_id and settings.telegram_bot_token:
+                else:
                     r = await http.post(f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage",
-                                        json={"chat_id": u.tg_id, "text": text[:4000], "parse_mode": "HTML"})
-                    sent += r.status_code < 400
+                                        json={"chat_id": ident, "text": text[:4000], "parse_mode": "HTML"})
+                sent += r.status_code < 400
             except httpx.HTTPError as e:
-                log.warning("Не удалось отправить тревогу сотруднику №%s: %s", u.id, e)
+                log.warning("Не удалось отправить тревогу (%s %s): %s", kind, ident, e)
     return sent
 
 

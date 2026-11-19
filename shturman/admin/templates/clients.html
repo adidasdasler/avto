@@ -2,7 +2,7 @@
 {% block title %}Клиенты{% endblock %}
 {% block content %}
 <h1>Клиенты</h1>
-<form method="get" action="/admin/clients" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+<form method="get" action="{{ A }}/clients" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
   <input id="q" name="q" value="{{ q }}" placeholder="Почта, номер, ID в MAX/Telegram, VIN или госномер" style="flex:1;min-width:240px">
   <button class="btn">Найти</button>
 </form>
@@ -10,11 +10,10 @@
   <table>
     <tr><th>№</th><th>Клиент</th><th>Вход</th><th>Пакет</th><th>Проверок</th><th>Оплачено</th><th>Активность</th></tr>
     {% for r in rows %}{% set u = r.user %}
-    <tr onclick="location.href='/admin/clients/{{ u.id }}'" style="cursor:pointer">
-      <td><a href="/admin/clients/{{ u.id }}">{{ u.id }}</a></td>
+    <tr onclick="location.href='{{ A }}/clients/{{ u.id }}'" style="cursor:pointer">
+      <td><a href="{{ A }}/clients/{{ u.id }}">{{ u.id }}</a></td>
       <td><b>{{ u.email or u.username or '—' }}</b>
         {% if u.blocked_at %}<span class="pill red">заблокирован</span>{% endif %}
-        {% if u.staff_role %}<span class="pill blue">{{ roles[u.staff_role] }}</span>{% endif %}
         {% if u.role == 'picker' %}<span class="pill grey">подборщик</span>{% endif %}</td>
       <td class="hint">{{ ['MAX' if u.max_id, 'Telegram' if u.tg_id, 'Яндекс' if u.yandex_id, 'почта' if u.password_hash]|select|join(', ') or '—' }}</td>
       <td>{{ u.credits }}{% if u.unlimited_until %} <span class="hint">безлимит до {{ u.unlimited_until|dt }}</span>{% endif %}</td>

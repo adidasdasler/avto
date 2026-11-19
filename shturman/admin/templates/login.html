@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Вход{% endblock %}
+{% block bare %}
+<div class="card">
+  <h1 style="font-size:22px">Вход для сотрудников</h1>
+  <form method="post" action="{{ A }}/login" style="display:grid;gap:10px" autocomplete="off">
+    <input type="text" name="login" placeholder="Логин" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+    <input type="password" name="password" placeholder="Пароль" autocomplete="current-password" required>
+    <input type="text" name="code" placeholder="Код из приложения (6 цифр)" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" autocomplete="one-time-code" required>
+    <button class="btn amber">Войти</button>
+  </form>
+</div>
+{% endblock %}

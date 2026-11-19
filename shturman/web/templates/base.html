@@ -64,7 +64,6 @@
   <a class="logo" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14.5" fill="none" stroke="#ffb020" stroke-width="1.5" opacity=".5"/><path d="M16 4l4.2 12L16 28l-4.2-12z" fill="#ffb020"/><circle cx="16" cy="16" r="1.8" fill="#0b1220"/></svg><span class="txt">{{ brand }}</span></a>
   <nav>
     <a href="/pros">Специалисты</a>
-    {% if is_admin %}<a href="/admin" class="hide-sm">Панель</a>{% endif %}
     {% if user %}<a href="/cabinet">Кабинет</a>
       <form class="inline hide-sm" method="post" action="/logout"><button class="btn sm ghost" style="color:var(--on-ink);border-color:rgba(255,255,255,.2)">Выйти</button></form>
     {% else %}<a class="btn sm amber" href="/login">Войти</a>{% endif %}

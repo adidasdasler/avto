@@ -1,109 +1,163 @@
 import re
 import time
 
+import pytest
+
 from shturman import totp
+from shturman.admin import accounts
 from shturman.db import User
 from tests.test_auth_email import register
 from tests.test_cabinet import make_client
 
-
-def code_for(client, user_id, offset=0):
-    user = client.portal.call(client.app.state.service.get_user, user_id)
-    return totp.code_at(user.totp_secret, int(time.time() // 30) + offset)
-
-
-def staff_login(client, email="admin@vincv.ru", role="admin"):
-    """Регистрация, роль, подключение 2FA через страницу настройки. Возвращает (user_id, резервные коды)."""
-    register(client, email=email)
-    user = client.portal.call(client.app.state.auth.user_by_email, email)
-
-    async def grant():
-        from shturman.admin.service import AdminService
-        await AdminService(client.app.state.service.db, client.app.state.service.settings).set_staff_role(user.id, role)
-    client.portal.call(grant)
-    r = client.get("/admin")
-    assert r.status_code == 303 and r.headers["location"] == "/admin/2fa/setup"
-    page = client.get("/admin/2fa/setup").text
-    assert "<svg" in page
-    secret = re.search(r"<code[^>]*>([A-Z2-7]+)</code>", page).group(1)
-    code = totp.code_at(secret, int(time.time() // 30))
-    r = client.post("/admin/2fa/setup", data={"password": "secret-123", "code": code})
-    codes = re.findall(r"[A-Z2-9]{4}-[A-Z2-9]{4}", r.text)
-    assert len(codes) == 8
-    return user.id, codes
+P = "/ops-test0123456789"
+SECRETS = {"boss": totp.new_secret(), "help": totp.new_secret()}
+PASSWORD = "very-long-pass-1"
 
 
-def test_panel_hidden_from_non_staff(settings):
+def staff_env(settings, ips: str = "") -> None:
+    """Два сотрудника в ADMIN_USERS, как их создаёт команда shturman.admin.cli add."""
+    settings.admin_path = P
+    settings.admin_allowed_ips = ips
+    h = accounts.hash_password(PASSWORD)
+    settings.admin_users = f"boss,admin,{h},{SECRETS['boss']};help,support,{h},{SECRETS['help']}"
+
+
+def code(login: str, offset: int = 0) -> str:
+    return totp.code_at(SECRETS[login], int(time.time() // 30) + offset)
+
+
+def staff_login(client, login: str = "boss", offset: int = 0):
+    r = client.post(P + "/login", data={"login": login, "password": PASSWORD, "code": code(login, offset)})
+    assert r.status_code == 303 and r.headers["location"] == P, r.text
+    return r
+
+
+def make_panel(settings, **kw):
+    staff_env(settings, **kw)
+    return make_client(settings)
+
+
+def test_panel_only_on_secret_path(settings):
+    staff_env(settings)
     with make_client(settings) as client:
-        assert client.get("/admin").status_code == 404  # не вошёл
-        register(client)
-        assert client.get("/admin").status_code == 404  # не сотрудник
-        assert client.get("/admin/clients").status_code == 404
-        assert client.get("/admin/2fa/setup").status_code == 404
+        assert client.get("/admin").status_code == 404
+        assert client.get("/admin/login").status_code == 404
+        assert client.get(P).headers["location"] == P + "/login"
+        assert "Вход для сотрудников" in client.get(P + "/login").text
+        assert "/admin" not in client.get("/robots.txt").text and P not in client.get("/robots.txt").text
+        # аккаунт сайта — даже с тем же логином — в панель не пускает
+        register(client, email="boss@vincv.ru")
+        assert client.get(P + "/clients").headers["location"] == P + "/login"
 
 
-def test_2fa_required_and_codes(settings):
-    with make_client(settings) as client:
-        uid, recovery = staff_login(client)
-        assert client.get("/admin").status_code == 200  # сессия прошла 2FA при подключении
-        # новая сессия: пароль есть, но без кода в панель не пускает
+def test_panel_disabled_without_path_or_users(settings):
+    with make_client(settings) as client:  # ADMIN_PATH пуст — панели нет
+        assert client.get("/admin").status_code == 404
+    settings.admin_path = P
+    with make_client(settings) as client:  # адрес есть, сотрудников нет — тоже 404
+        assert client.get(P + "/login").status_code == 404
+
+
+def test_login_requires_password_and_code(settings):
+    with make_panel(settings) as client:
+        bad = [{"login": "boss", "password": "wrong-password", "code": code("boss")},
+               {"login": "boss", "password": PASSWORD, "code": "000000"},
+               {"login": "nobody", "password": PASSWORD, "code": code("boss")}]
+        for data in bad:
+            r = client.post(P + "/login", data=data, follow_redirects=True)
+            assert "Неверный логин, пароль или код" in r.text
+        assert client.get(P).status_code == 303
+        staff_login(client)
+        page = client.get(P).text
+        assert "Сводка" in page and "boss" in page
+        cookie = next(c for c in client.cookies.jar if c.name == "vadm")
+        assert cookie.path == P and cookie.has_nonstandard_attr("HttpOnly")
+        # тот же код второй раз (перехвачен) — не принимается
         client.cookies.clear()
-        client.post("/login", data={"email": "admin@vincv.ru", "password": "secret-123"})
-        r = client.get("/admin/clients")
-        assert r.status_code == 303 and r.headers["location"].startswith("/admin/2fa?next=")
-        assert "Неверный код" in client.post("/admin/2fa", data={"code": "000000"}, follow_redirects=True).text
-        code = code_for(client, uid, +1)
-        r = client.post("/admin/2fa", data={"code": code, "next": "/admin/clients"})
-        assert r.headers["location"] == "/admin/clients"
-        # тот же код повторно (перехваченный) — не принимается
-        client.cookies.clear()
-        client.post("/login", data={"email": "admin@vincv.ru", "password": "secret-123"})
-        assert "Неверный код" in client.post("/admin/2fa", data={"code": code}, follow_redirects=True).text
-        # резервный код — один раз
-        r = client.post("/admin/2fa", data={"code": recovery[0].lower()}, follow_redirects=True)
-        assert "Осталось кодов: 7" in r.text
-        client.cookies.clear()
-        client.post("/login", data={"email": "admin@vincv.ru", "password": "secret-123"})
-        assert "Неверный код" in client.post("/admin/2fa", data={"code": recovery[0]}, follow_redirects=True).text
+        r = client.post(P + "/login", data={"login": "boss", "password": PASSWORD, "code": code("boss")},
+                        follow_redirects=True)
+        assert "Неверный логин" in r.text
+        # выход завершает сессию на сервере
+        staff_login(client, offset=1)
+        sid = client.cookies.get("vadm")
+        client.post(P + "/logout")
+        client.cookies.set("vadm", sid, path=P)
+        assert client.get(P).status_code == 303
 
 
-def test_setup_requires_password_and_valid_code(settings):
-    with make_client(settings) as client:
-        register(client, email="s@vincv.ru")
-        user = client.portal.call(client.app.state.auth.user_by_email, "s@vincv.ru")
-        client.app.state.service.settings.admin_user_ids = str(user.id)  # первый администратор из .env
-        client.get("/admin/2fa/setup")
-        secret = client.portal.call(client.app.state.service.get_user, user.id).totp_secret
-        good = totp.code_at(secret, int(time.time() // 30))
-        assert "Неверный пароль" in client.post("/admin/2fa/setup", data={"password": "nope", "code": good},
-                                                follow_redirects=True).text
-        assert "Код не подошёл" in client.post("/admin/2fa/setup", data={"password": "secret-123", "code": "123456"},
-                                               follow_redirects=True).text
-        assert "2FA подключена" in client.post("/admin/2fa/setup", data={"password": "secret-123", "code": good}).text
+def test_bruteforce_lockout(settings):
+    with make_panel(settings) as client:
+        for _ in range(5):
+            client.post(P + "/login", data={"login": "boss", "password": "x" * 12, "code": "111111"})
+        r = client.post(P + "/login", data={"login": "boss", "password": PASSWORD, "code": code("boss")},
+                        follow_redirects=True)
+        assert "Слишком много" in r.text  # даже с верными данными — блок на 15 минут
+
+
+def test_ip_allowlist(settings):
+    with make_panel(settings, ips="10.0.0.0/8, 192.168.1.5") as client:  # TestClient ходит с «testclient»
+        assert client.get(P + "/login").status_code == 404
+        assert client.post(P + "/login", data={"login": "boss"}).status_code == 404
+    with make_panel(settings, ips="testclient") as client:  # нераспознанный адрес — тоже мимо
+        assert client.get(P + "/login").status_code == 404
+
+
+def test_removed_user_session_dies(settings):
+    with make_panel(settings) as client:
+        staff_login(client)
+        assert client.get(P).status_code == 200
+        settings.admin_users = settings.admin_users.split(";")[1]  # boss убран из .env
+        assert client.get(P).status_code == 303
 
 
 def test_support_role_limits_and_client_actions(settings):
-    with make_client(settings) as client:
-        uid, _ = staff_login(client, email="help@vincv.ru", role="support")
+    with make_panel(settings) as client:
+        staff_login(client, "help")
         victim = client.portal.call(client.app.state.service.max_user, 4242)
         client.portal.call(lambda: client.app.state.service.express("X7TEST00000000001", user=victim))
         # поиск по VIN и карточка
-        assert f"/admin/clients/{victim.id}" in client.get("/admin/clients?q=X7TEST00000000001").text
-        assert "LADA Vesta" in client.get(f"/admin/clients/{victim.id}").text
+        assert f"{P}/clients/{victim.id}" in client.get(P + "/clients?q=X7TEST00000000001").text
+        assert "LADA Vesta" in client.get(f"{P}/clients/{victim.id}").text
         # начисление и списание отчётов — с причиной
-        client.post(f"/admin/clients/{victim.id}/credits", data={"delta": "5", "reason": "компенсация"})
+        client.post(f"{P}/clients/{victim.id}/credits", data={"delta": "5", "reason": "компенсация"})
         assert client.portal.call(client.app.state.service.get_user, victim.id).credits == 5
-        r = client.post(f"/admin/clients/{victim.id}/credits", data={"delta": "-9", "reason": "ошибка"}, follow_redirects=True)
+        r = client.post(f"{P}/clients/{victim.id}/credits", data={"delta": "-9", "reason": "ошибка"},
+                        follow_redirects=True)
         assert "Нельзя списать больше" in r.text
         # блокировка
-        client.post(f"/admin/clients/{victim.id}/block", data={"block": "1", "reason": "мошенничество"})
+        client.post(f"{P}/clients/{victim.id}/block", data={"block": "1", "reason": "мошенничество"})
         assert client.portal.call(client.app.state.service.get_user, victim.id).blocked_at is not None
         # действия администратора поддержке недоступны
-        assert client.post(f"/admin/clients/{victim.id}/role", data={"role": "admin"}).status_code == 403
-        assert client.post("/admin/backups/x.sql.gz/restore", data={}).status_code == 403
-        # журнал
-        page = client.get("/admin/staff").text
-        assert "credits" in page and "block" in page and "компенсация" in page
+        assert client.post(P + "/backups/x.sql.gz/restore", data={}).status_code == 403
+        assert client.get(P + "/backups/x.sql.gz").status_code == 403
+        # журнал с логином сотрудника
+        page = client.get(P + "/staff").text
+        assert "credits" in page and "block" in page and "компенсация" in page and "boss" in page
+
+
+def test_cli_add_writes_env(tmp_path, monkeypatch, capsys):
+    from shturman.admin import cli
+    env = tmp_path / ".env"
+    env.write_text("BRAND_NAME=VinCv\nPUBLIC_BASE_URL=https://vincv.ru\n")
+    monkeypatch.setattr(cli, "ENV", env)
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": PASSWORD)
+    secrets_seen = []
+    orig = cli.show_qr
+    monkeypatch.setattr(cli, "show_qr", lambda acc, brand: (secrets_seen.append(acc.totp_secret), orig(acc, brand)))
+    monkeypatch.setattr("builtins.input", lambda prompt="": totp.code_at(secrets_seen[-1], int(time.time() // 30)))
+    cli.main(["add", "Ivan", "--role", "admin"])
+    out = capsys.readouterr().out
+    assert "Код верный" in out and any(ch in out for ch in "█▀▄#")  # QR в терминале
+    text = env.read_text()
+    assert "ADMIN_PATH=/ops-" in text and PASSWORD not in text and "$" not in text
+    users = accounts.parse(re.search(r"ADMIN_USERS=(.*)", text).group(1))
+    assert users["ivan"].role == "admin" and accounts.check(users, "ivan", PASSWORD)
+    assert accounts.check(users, "ivan", "wrong-password!") is None
+    assert oct(env.stat().st_mode)[-3:] == "600"
+    with pytest.raises(SystemExit):
+        cli.main(["add", "ivan"])  # уже есть
+    cli.main(["remove", "ivan"])
+    assert accounts.parse(re.search(r"ADMIN_USERS=(.*)", env.read_text()).group(1)) == {}
 
 
 async def test_blocked_user_cannot_use_bot(db, settings, service):
@@ -122,20 +176,20 @@ async def test_blocked_user_cannot_use_bot(db, settings, service):
 
 def test_backup_create_and_restore_sqlite(settings, tmp_path):
     settings.backup_dir = str(tmp_path / "backups")
-    with make_client(settings) as client:
-        uid, _ = staff_login(client)
+    with make_panel(settings) as client:
+        staff_login(client)
         client.portal.call(client.app.state.service.max_user, 1001)  # данные до бэкапа
-        r = client.post("/admin/actions/backup")
-        assert "/admin/backups" in r.headers["location"]
-        name = re.search(r"(shturman-[\w-]+\.sqlite\.gz)", client.get("/admin/backups").text).group(1)
+        r = client.post(P + "/actions/backup")
+        assert P + "/backups" in r.headers["location"]
+        name = re.search(r"(shturman-[\w-]+\.sqlite\.gz)", client.get(P + "/backups").text).group(1)
         client.portal.call(client.app.state.service.max_user, 2002)  # появилось после бэкапа
 
         # без слова-подтверждения и с неверным кодом — отказ
-        assert "ВОССТАНОВИТЬ" in client.post(f"/admin/backups/{name}/restore", data={"code": "1"}, follow_redirects=True).text
-        assert "Неверный код" in client.post(f"/admin/backups/{name}/restore", data={"code": "000000", "confirm": "ВОССТАНОВИТЬ"},
+        assert "ВОССТАНОВИТЬ" in client.post(f"{P}/backups/{name}/restore", data={"code": "1"}, follow_redirects=True).text
+        assert "Неверный код" in client.post(f"{P}/backups/{name}/restore", data={"code": "000000", "confirm": "ВОССТАНОВИТЬ"},
                                              follow_redirects=True).text
-        r = client.post(f"/admin/backups/{name}/restore",
-                        data={"code": code_for(client, uid, +1), "confirm": "восстановить"})
+        r = client.post(f"{P}/backups/{name}/restore",
+                        data={"code": code("boss", +1), "confirm": "восстановить"})
         assert "восстановлена" in r.headers.get("location", "") or r.status_code == 303
 
         async def users():
@@ -147,7 +201,7 @@ def test_backup_create_and_restore_sqlite(settings, tmp_path):
         files = sorted(p.name for p in (tmp_path / "backups").iterdir())
         assert any("before-restore" in f for f in files)
         # путь за пределы папки не принимается
-        assert client.get("/admin/backups/..%2F..%2Fetc%2Fpasswd").status_code in (404, 303)
+        assert client.get(P + "/backups/..%2F..%2Fetc%2Fpasswd").status_code in (404, 303)
 
 
 async def test_backup_file_not_world_readable(settings, tmp_path, db):

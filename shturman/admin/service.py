@@ -12,18 +12,6 @@ from ..config import Settings
 from ..db import (AdminAudit, Check, Database, Order, Payment, ProProfile, ProviderLog, User, WebSession,
                   utcnow)
 
-ROLES = {"support": "Поддержка", "admin": "Администратор"}
-
-
-def effective_role(user: User | None, settings: Settings) -> str | None:
-    """Роль сотрудника. ADMIN_USER_IDS из .env — администраторы по умолчанию (первый вход в панель)."""
-    if user is None or user.blocked_at is not None:
-        return None
-    if user.staff_role in ROLES:
-        return user.staff_role
-    return "admin" if user.id in settings.admins else None
-
-
 @dataclass
 class ClientRow:
     user: User
@@ -37,16 +25,16 @@ class AdminService:
         self.db, self.settings = db, settings
 
     # ---------------------------------------------------------------- журнал
-    async def audit(self, staff_id: int | None, action: str, target: str | None = None,
+    async def audit(self, login: str | None, action: str, target: str | None = None,
                     details: dict[str, Any] | None = None, ip: str | None = None) -> None:
         async with self.db.session() as s:
-            s.add(AdminAudit(staff_user_id=staff_id, action=action, target=target, details=details, ip=ip))
+            s.add(AdminAudit(staff_login=login, action=action, target=target, details=details, ip=ip))
             await s.commit()
 
-    async def audit_log(self, limit: int = 100, staff_id: int | None = None) -> list[AdminAudit]:
+    async def audit_log(self, limit: int = 100, login: str | None = None) -> list[AdminAudit]:
         stmt = select(AdminAudit).order_by(AdminAudit.id.desc()).limit(limit)
-        if staff_id:
-            stmt = stmt.where(AdminAudit.staff_user_id == staff_id)
+        if login:
+            stmt = stmt.where(AdminAudit.staff_login == login)
         async with self.db.session() as s:
             return list((await s.execute(stmt)).scalars())
 
@@ -140,7 +128,7 @@ class AdminService:
             sessions = (await s.execute(select(func.count()).select_from(WebSession).where(
                 WebSession.user_id == user_id, WebSession.expires_at > utcnow()))).scalar_one()
         return {"user": user, "checks": checks, "orders": orders, "payments": payments, "profile": profile,
-                "sessions": sessions, "role": effective_role(user, self.settings)}
+                "sessions": sessions}
 
     async def adjust_credits(self, user_id: int, delta: int) -> int:
         """Начислить (delta > 0) или списать отчёты из пакета; ниже нуля не уходит."""
@@ -161,30 +149,6 @@ class AdminService:
             user.blocked_at, user.blocked_reason = (utcnow(), (reason or "")[:300]) if blocked else (None, None)
             if blocked:  # выкинуть из всех сессий
                 await s.execute(delete(WebSession).where(WebSession.user_id == user_id))
-            await s.commit()
-
-    async def staff(self) -> list[User]:
-        async with self.db.session() as s:
-            rows = await s.execute(select(User).where(or_(User.staff_role.in_(list(ROLES)),
-                                                          User.id.in_(self.settings.admins or {-1})))
-                                   .order_by(User.id))
-            return list(rows.scalars())
-
-    async def set_staff_role(self, user_id: int, role: str | None) -> None:
-        if role is not None and role not in ROLES:
-            raise ValueError("Неизвестная роль")
-        async with self.db.session() as s:
-            user = await s.get(User, user_id)
-            user.staff_role = role
-            if role is None:  # без роли — без доступа к панели в текущих сессиях
-                await s.execute(update(WebSession).where(WebSession.user_id == user_id).values(mfa_at=None))
-            await s.commit()
-
-    async def reset_2fa(self, user_id: int) -> None:
-        async with self.db.session() as s:
-            user = await s.get(User, user_id)
-            user.totp_secret = user.totp_enabled_at = user.totp_last_counter = user.recovery_codes = None
-            await s.execute(update(WebSession).where(WebSession.user_id == user_id).values(mfa_at=None))
             await s.commit()
 
     async def orders(self, status: str = "", limit: int = 100) -> list[tuple[Order, User | None]]:

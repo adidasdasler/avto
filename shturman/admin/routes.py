@@ -1,12 +1,19 @@
-"""Панель администратора /admin: только сотрудники и только после двухфакторной проверки.
+"""Панель администратора на секретном адресе ADMIN_PATH.
 
-Роли: support — клиенты, начисления, заказы, модерация, создание бэкапа;
-admin — всё то же + восстановление из бэкапа, удаление бэкапов, сотрудники, сброс 2FA.
-Посторонним панель отвечает 404, чтобы не раскрывать её существование.
+Вход — только сотрудники из ADMIN_USERS в .env (логин + пароль + код 2FA одной формой); аккаунты
+сайта к панели отношения не имеют. Вне ADMIN_PATH панели нет (404), а с IP вне ADMIN_ALLOWED_IPS
+(если задан) — 404 даже на секретном адресе. Сессия — отдельная cookie, которая отправляется
+браузером только на адрес панели.
+
+Роли: support — клиенты, начисления, блокировки, заказы, анкеты, создание бэкапа;
+admin — всё то же + скачивание, восстановление и удаление бэкапов.
 """
 from __future__ import annotations
 
+import ipaddress
 import logging
+import secrets
+from collections import defaultdict, deque
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -15,19 +22,22 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from markupsafe import Markup
+from sqlalchemy import delete
 
 from .. import totp
 from ..cascade import TIER_TITLES
-from ..db import User, WebSession, utcnow
+from ..db import AdminSession, AdminTotpState, utcnow
 from ..maintenance import cleanup
 from ..pros import KINDS
-from ..web.routes import COOKIE, auth_of, form_data, orders_of, pros_of, rate_limited, svc
-from . import backups
-from .service import ROLES, AdminService, effective_role
+from ..web.routes import form_data, orders_of, pros_of, svc
+from . import accounts, backups
+from .accounts import ROLES, StaffAccount
+from .service import AdminService
 
 log = logging.getLogger(__name__)
-router = APIRouter(prefix="/admin")
+router = APIRouter()
+COOKIE = "vadm"
+
 _env = Environment(loader=FileSystemLoader(Path(__file__).parent / "templates"), autoescape=select_autoescape(["html"]))
 _env.filters["rub"] = lambda v: f"{int(v or 0):,}".replace(",", " ") + " ₽"
 _env.filters["dt"] = lambda v: v.strftime("%d.%m.%Y %H:%M") if v else "—"
@@ -36,13 +46,13 @@ _env.filters["size"] = lambda n: (f"{n / 1024 ** 3:.1f} ГБ" if n >= 1024 ** 3 
                                   f"{n / 1024 ** 2:.1f} МБ" if n >= 1024 ** 2 else f"{n / 1024:.0f} КБ")
 
 
-class Staff:
-    def __init__(self, user: User, session: WebSession, role: str):
-        self.user, self.session, self.role = user, session, role
+# ---------------------------------------------------------------- доступ
+def A(request: Request) -> str:
+    return svc(request).settings.admin_prefix
 
-    @property
-    def is_admin(self) -> bool:
-        return self.role == "admin"
+
+def accounts_of(request: Request) -> dict[str, StaffAccount]:
+    return accounts.parse(svc(request).settings.admin_users)
 
 
 def admin_of(request: Request) -> AdminService:
@@ -58,103 +68,170 @@ def ip_of(request: Request) -> str:
     return request.client.host if request.client else "-"
 
 
-def go(url: str, msg: str | None = None) -> RedirectResponse:
-    path, _, frag = url.partition("#")
-    if msg:
-        path += ("&" if "?" in path else "?") + "msg=" + quote(msg)
-    return RedirectResponse(path + (f"#{frag}" if frag else ""), status_code=303)
+def ip_allowed(request: Request) -> bool:
+    allowed = [a.strip() for a in svc(request).settings.admin_allowed_ips.split(",") if a.strip()]
+    if not allowed:
+        return True
+    try:
+        ip = ipaddress.ip_address(ip_of(request))
+        return any(ip in ipaddress.ip_network(a, strict=False) for a in allowed)
+    except ValueError:
+        return False
 
 
-async def staff_or_404(request: Request) -> tuple[WebSession, User, str]:
-    rec = await auth_of(request).session_record(request.cookies.get(COOKIE))
-    role = effective_role(rec[1], svc(request).settings) if rec else None
-    if not rec or not role:
+def guard(request: Request) -> None:
+    """Панель выключена, нет ни одного сотрудника или IP не из белого списка — для всех одинаково 404."""
+    if not A(request) or not accounts_of(request) or not ip_allowed(request):
         raise HTTPException(404)
-    return rec[0], rec[1], role
+
+
+def go(request: Request, path: str = "", msg: str | None = None) -> RedirectResponse:
+    url = A(request) + path
+    if msg:
+        url += ("&" if "?" in url else "?") + "msg=" + quote(msg)
+    return RedirectResponse(url, status_code=303)
+
+
+class Staff:
+    def __init__(self, account: StaffAccount, session_id: str):
+        self.login, self.role, self.session_id = account.login, account.role, session_id
+        self.account = account
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == "admin"
+
+
+async def current_staff(request: Request) -> Staff | None:
+    sid = request.cookies.get(COOKIE)
+    if not sid:
+        return None
+    async with svc(request).db.session() as s:
+        sess = await s.get(AdminSession, sid)
+    if sess is None or sess.expires_at < utcnow():
+        return None
+    account = accounts_of(request).get(sess.login)  # убрали из .env — сессия больше не действует
+    return Staff(account, sid) if account else None
 
 
 async def require_staff(request: Request, admin: bool = False) -> Staff:
-    sess, user, role = await staff_or_404(request)
-    if user.totp_enabled_at is None:
-        raise HTTPException(303, headers={"Location": "/admin/2fa/setup"})
-    ttl = timedelta(hours=svc(request).settings.staff_mfa_hours)
-    if sess.mfa_at is None or sess.mfa_at < utcnow() - ttl:
-        raise HTTPException(303, headers={"Location": "/admin/2fa?next=" + quote(request.url.path)})
-    if admin and role != "admin":
+    guard(request)
+    staff = await current_staff(request)
+    if staff is None:
+        raise HTTPException(303, headers={"Location": A(request) + "/login"})
+    if admin and not staff.is_admin:
         raise HTTPException(403, "Действие доступно только администратору")
-    return Staff(user, sess, role)
+    return staff
+
+
+async def verify_code(request: Request, account: StaffAccount, code: str) -> bool:
+    """Код из приложения; каждый шаг TOTP принимается один раз (перехваченный код бесполезен)."""
+    async with svc(request).db.session() as s:
+        state = await s.get(AdminTotpState, account.login, with_for_update=True)
+        counter = totp.verify(account.totp_secret, code, state.last_counter if state else None)
+        if counter is None:
+            return False
+        if state is None:
+            s.add(AdminTotpState(login=account.login, last_counter=counter))
+        else:
+            state.last_counter = counter
+        await s.commit()
+        return True
+
+
+def _failures(request: Request) -> dict[str, deque]:
+    st = request.app.state
+    if not hasattr(st, "admin_failures"):
+        st.admin_failures = defaultdict(deque)
+    return st.admin_failures
+
+
+def locked(request: Request, key: str, limit: int, window: float) -> bool:
+    import time
+    q = _failures(request)[key]
+    while q and time.monotonic() - q[0] > window:
+        q.popleft()
+    return len(q) >= limit
+
+
+def fail(request: Request, *keys: str) -> None:
+    import time
+    for k in keys:
+        _failures(request)[k].append(time.monotonic())
 
 
 def render(request: Request, name: str, staff: Staff | None = None, **ctx: Any) -> HTMLResponse:
     s = svc(request).settings
     from ..api.app import payment_warnings
-    html = _env.get_template(name).render(brand=s.brand_name, staff=staff, roles=ROLES, kinds=KINDS,
+    html = _env.get_template(name).render(brand=s.brand_name, staff=staff, roles=ROLES, kinds=KINDS, A=A(request),
                                           tiers=TIER_TITLES, msg=request.query_params.get("msg"),
-                                          warnings=payment_warnings(s) if staff else [], path=request.url.path, **ctx)
-    return HTMLResponse(html)
+                                          warnings=(payment_warnings(s) + config_warnings(s)) if staff else [],
+                                          path=request.url.path, **ctx)
+    return HTMLResponse(html, headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow"})
 
 
-async def log_action(request: Request, staff: Staff, action: str, target: str | None = None, **details: Any) -> None:
-    await admin_of(request).audit(staff.user.id, action, target, details or None, ip_of(request))
+def config_warnings(s) -> list[str]:
+    out = []
+    if not (s.legal_name and s.legal_inn and s.contact_email):
+        out.append("Не заполнены реквизиты (LEGAL_NAME, LEGAL_INN, CONTACT_EMAIL) — они нужны в оферте и для Robokassa.")
+    if not (s.alert_max_user_ids or s.alert_tg_chat_ids):
+        out.append("Тревоги некому присылать: укажите ALERT_MAX_USER_IDS (ID в MAX — бот отвечает на /id).")
+    return out
 
 
-# ---------------------------------------------------------------- 2FA
-@router.get("/2fa/setup", response_class=HTMLResponse)
-async def setup_page(request: Request):
-    sess, user, role = await staff_or_404(request)
-    if user.totp_enabled_at is not None:
-        return go("/admin")
-    secret = await auth_of(request).totp_pending_secret(user.id)
-    account = user.email or f"user{user.id}"
-    uri = totp.provisioning_uri(secret, account, svc(request).settings.brand_name)
-    return render(request, "2fa_setup.html", user=user, secret=secret, qr=Markup(totp.qr_svg(uri)),
-                  has_password=bool(user.password_hash), error=None)
+async def log_action(request: Request, staff: Staff | None, action: str, target: str | None = None,
+                     **details: Any) -> None:
+    await admin_of(request).audit(staff.login if staff else details.pop("login", None), action, target,
+                                  details or None, ip_of(request))
 
 
-@router.post("/2fa/setup", response_class=HTMLResponse)
-async def setup_confirm(request: Request):
-    sess, user, role = await staff_or_404(request)
+# ---------------------------------------------------------------- вход
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    guard(request)
+    if await current_staff(request):
+        return go(request)
+    return render(request, "login.html")
+
+
+@router.post("/login")
+async def login(request: Request):
+    guard(request)
     f = await form_data(request)
-    if rate_limited(request, f"2fa:{user.id}", limit=5, window=300, count=False):
-        return go("/admin/2fa/setup", "Слишком много попыток, подождите 5 минут")
-    if not user.password_hash or not await auth_of(request).check_user_password(user.id, f.get("password", "")):
-        rate_limited(request, f"2fa:{user.id}", limit=5, window=300)
-        return go("/admin/2fa/setup", "Неверный пароль")
-    codes = await auth_of(request).totp_enable(user.id, f.get("code", ""))
-    if not codes:
-        rate_limited(request, f"2fa:{user.id}", limit=5, window=300)
-        return go("/admin/2fa/setup", "Код не подошёл — проверьте время на телефоне и введите свежий код")
-    await auth_of(request).mark_mfa(sess.id)
-    await admin_of(request).audit(user.id, "2fa_enabled", f"user:{user.id}", None, ip_of(request))
-    return render(request, "2fa_codes.html", codes=codes)
+    ip, login_name = ip_of(request), (f.get("login") or "").strip().lower()[:32]
+    if locked(request, f"ip:{ip}", 5, 900) or locked(request, f"login:{login_name}", 10, 3600):
+        return go(request, "/login", "Слишком много неудачных попыток. Подождите и попробуйте позже.")
+    account = accounts.check(accounts_of(request), login_name, f.get("password", ""))
+    if account is None or not await verify_code(request, account, f.get("code", "")):
+        fail(request, f"ip:{ip}", f"login:{login_name}")
+        await log_action(request, None, "login_failed", login_name or None, login=None)
+        log.warning("Панель: неудачный вход «%s» с %s", login_name, ip)
+        return go(request, "/login", "Неверный логин, пароль или код")  # без подсказки, что именно неверно
+    sid = secrets.token_urlsafe(32)
+    async with svc(request).db.session() as s:
+        s.add(AdminSession(id=sid, login=account.login, ip=ip,
+                           expires_at=utcnow() + timedelta(hours=svc(request).settings.staff_mfa_hours)))
+        await s.commit()
+    await admin_of(request).audit(account.login, "login", None, None, ip)
+    resp = go(request)
+    resp.set_cookie(COOKIE, sid, max_age=svc(request).settings.staff_mfa_hours * 3600, path=A(request),
+                    httponly=True, secure=svc(request).settings.public_base_url.startswith("https://"),
+                    samesite="strict")
+    return resp
 
 
-@router.get("/2fa", response_class=HTMLResponse)
-async def mfa_page(request: Request):
-    sess, user, role = await staff_or_404(request)
-    if user.totp_enabled_at is None:
-        return go("/admin/2fa/setup")
-    return render(request, "2fa.html", next=request.query_params.get("next") or "/admin")
-
-
-@router.post("/2fa")
-async def mfa_check(request: Request):
-    sess, user, role = await staff_or_404(request)
-    f = await form_data(request)
-    nxt = f.get("next") or "/admin"
-    nxt = nxt if nxt.startswith("/admin") else "/admin"
-    if rate_limited(request, f"2fa:{user.id}", limit=5, window=300, count=False):
-        return go(f"/admin/2fa?next={quote(nxt)}", "Слишком много неверных кодов, подождите 5 минут")
-    kind = await auth_of(request).totp_check(user.id, f.get("code", ""))
-    if kind is None:
-        rate_limited(request, f"2fa:{user.id}", limit=5, window=300)
-        await admin_of(request).audit(user.id, "2fa_failed", None, None, ip_of(request))
-        return go(f"/admin/2fa?next={quote(nxt)}", "Неверный код")
-    await auth_of(request).mark_mfa(sess.id)
-    await admin_of(request).audit(user.id, "login", None, {"factor": kind}, ip_of(request))
-    msg = "Вход по резервному коду. Осталось кодов: " + str(len((await svc(request).get_user(user.id)).recovery_codes or [])) \
-        if kind == "recovery" else None
-    return go(nxt, msg)
+@router.post("/logout")
+async def logout(request: Request):
+    guard(request)
+    await form_data(request)
+    sid = request.cookies.get(COOKIE)
+    if sid:
+        async with svc(request).db.session() as s:
+            await s.execute(delete(AdminSession).where(AdminSession.id == sid))
+            await s.commit()
+    resp = go(request, "/login")
+    resp.delete_cookie(COOKIE, path=A(request))
+    return resp
 
 
 # ---------------------------------------------------------------- сводка
@@ -166,9 +243,8 @@ async def dashboard(request: Request):
     files = backups.list_backups(svc(request).settings)
     from .. import alerts
     return render(request, "dashboard.html", staff, stats=await a.stats(), errors=await a.provider_errors(8),
-                  alerts=await alerts.recent(svc(request).db),
-                  audit=await a.audit_log(10), last_backup=files[0] if files else None, disk=(free, total),
-                  settings=svc(request).settings)
+                  alerts=await alerts.recent(svc(request).db), audit=await a.audit_log(10),
+                  last_backup=files[0] if files else None, disk=(free, total), settings=svc(request).settings)
 
 
 @router.post("/actions/{action}")
@@ -179,20 +255,20 @@ async def quick_action(request: Request, action: str):
         try:
             b = await backups.create_backup(svc(request).settings, "panel")
         except backups.BackupError as e:
-            return go("/admin", f"Бэкап не создан: {e}")
+            return go(request, "", f"Бэкап не создан: {e}")
         await log_action(request, staff, "backup_create", b.name)
-        return go("/admin/backups", f"Бэкап создан: {b.name}")
+        return go(request, "/backups", f"Бэкап создан: {b.name}")
     if action == "payments":
         orders = orders_of(request)
         await orders.poll_pending()
         from ..web.routes import deliver_web_orders
         await deliver_web_orders(svc(request), orders)
         await log_action(request, staff, "payments_poll")
-        return go("/admin/orders", "Статусы оплат обновлены")
+        return go(request, "/orders", "Статусы оплат обновлены")
     if action == "cleanup":
         out = await cleanup(svc(request).db, svc(request).settings)
         await log_action(request, staff, "cleanup", None, **out)
-        return go("/admin", f"Очищено: кэш {out['cache']}, анонимных проверок {out['anon_checks']}")
+        return go(request, "", f"Очищено: кэш {out['cache']}, анонимных проверок {out['anon_checks']}")
     raise HTTPException(404)
 
 
@@ -218,60 +294,32 @@ async def client(request: Request, user_id: int):
 async def client_credits(request: Request, user_id: int):
     staff = await require_staff(request)
     f = await form_data(request)
+    back = f"/clients/{user_id}"
     try:
         delta = int(f.get("delta", "0"))
     except ValueError:
-        return go(f"/admin/clients/{user_id}", "Укажите число")
+        return go(request, back, "Укажите число")
     reason = (f.get("reason") or "").strip()
     if not delta or not reason:
-        return go(f"/admin/clients/{user_id}", "Укажите количество и причину")
+        return go(request, back, "Укажите количество и причину")
     if abs(delta) > 500:
-        return go(f"/admin/clients/{user_id}", "Не больше 500 отчётов за раз")
+        return go(request, back, "Не больше 500 отчётов за раз")
     try:
         left = await admin_of(request).adjust_credits(user_id, delta)
     except ValueError as e:
-        return go(f"/admin/clients/{user_id}", str(e))
+        return go(request, back, str(e))
     await log_action(request, staff, "credits", f"user:{user_id}", delta=delta, reason=reason, left=left)
-    return go(f"/admin/clients/{user_id}", f"Готово, в пакете {left}")
+    return go(request, back, f"Готово, в пакете {left}")
 
 
 @router.post("/clients/{user_id}/block")
 async def client_block(request: Request, user_id: int):
     staff = await require_staff(request)
     f = await form_data(request)
-    if user_id == staff.user.id:
-        return go(f"/admin/clients/{user_id}", "Нельзя заблокировать себя")
-    target = await svc(request).get_user(user_id)
-    if target and effective_role(target, svc(request).settings) and not staff.is_admin:
-        raise HTTPException(403, "Блокировать сотрудников может только администратор")
     block = f.get("block") == "1"
     await admin_of(request).set_blocked(user_id, block, f.get("reason"))
     await log_action(request, staff, "block" if block else "unblock", f"user:{user_id}", reason=f.get("reason"))
-    return go(f"/admin/clients/{user_id}", "Заблокирован" if block else "Разблокирован")
-
-
-@router.post("/clients/{user_id}/role")
-async def client_role(request: Request, user_id: int):
-    staff = await require_staff(request, admin=True)
-    f = await form_data(request)
-    role = f.get("role") or None
-    if user_id == staff.user.id and role != "admin":
-        return go(f"/admin/clients/{user_id}", "Нельзя снять роль с себя")
-    try:
-        await admin_of(request).set_staff_role(user_id, role)
-    except ValueError as e:
-        return go(f"/admin/clients/{user_id}", str(e))
-    await log_action(request, staff, "role", f"user:{user_id}", role=role)
-    return go(f"/admin/clients/{user_id}", "Роль изменена")
-
-
-@router.post("/clients/{user_id}/reset-2fa")
-async def client_reset_2fa(request: Request, user_id: int):
-    staff = await require_staff(request, admin=True)
-    await form_data(request)
-    await admin_of(request).reset_2fa(user_id)
-    await log_action(request, staff, "2fa_reset", f"user:{user_id}")
-    return go(f"/admin/clients/{user_id}", "2FA сброшена — при следующем входе сотрудник подключит её заново")
+    return go(request, f"/clients/{user_id}", "Заблокирован" if block else "Разблокирован")
 
 
 # ---------------------------------------------------------------- заказы
@@ -287,7 +335,7 @@ async def order_refresh(request: Request, order_id: int):
     await form_data(request)
     order = await orders_of(request).refresh(order_id)
     await log_action(request, staff, "order_refresh", f"order:{order_id}", status=order.status if order else None)
-    return go("/admin/orders", f"Заказ №{order_id}: {order.status if order else 'не найден'}")
+    return go(request, "/orders", f"Заказ №{order_id}: {order.status if order else 'не найден'}")
 
 
 # ---------------------------------------------------------------- анкеты
@@ -311,7 +359,7 @@ async def pro_moderate(request: Request, profile_id: int):
         raise HTTPException(400)
     await log_action(request, staff, f"pro_{action}", f"pro:{profile_id}", reason=f.get("reason"),
                      days=f.get("days"), plan=f.get("plan"))
-    return go(f"/admin/pros?status={quote(f.get('back') or 'pending')}", "Готово")
+    return go(request, f"/pros?status={quote(f.get('back') or 'pending')}", "Готово")
 
 
 # ---------------------------------------------------------------- бэкапы
@@ -330,7 +378,7 @@ async def backup_download(request: Request, name: str):
     except backups.BackupError:
         raise HTTPException(404)
     await log_action(request, staff, "backup_download", name)
-    return FileResponse(path, filename=name, media_type="application/gzip")
+    return FileResponse(path, filename=name, media_type="application/gzip", headers={"Cache-Control": "no-store"})
 
 
 @router.post("/backups/{name}/restore")
@@ -338,11 +386,10 @@ async def backup_restore(request: Request, name: str):
     staff = await require_staff(request, admin=True)
     f = await form_data(request)
     if f.get("confirm", "").strip().upper() != "ВОССТАНОВИТЬ":
-        return go("/admin/backups", "Для восстановления введите слово ВОССТАНОВИТЬ")
-    # Свежий код из приложения (не резервный) — даже при уже пройденной 2FA.
-    if await auth_of(request).totp_check(staff.user.id, f.get("code", ""), allow_recovery=False) != "totp":
+        return go(request, "/backups", "Для восстановления введите слово ВОССТАНОВИТЬ")
+    if not await verify_code(request, staff.account, f.get("code", "")):  # свежий код — даже при открытой сессии
         await log_action(request, staff, "restore_denied", name)
-        return go("/admin/backups", "Неверный код из приложения")
+        return go(request, "/backups", "Неверный код из приложения")
     st = svc(request).settings
     try:
         backups.path_for(st, name)
@@ -350,12 +397,12 @@ async def backup_restore(request: Request, name: str):
         await backups.restore_backup(st, svc(request).db, name)
     except backups.BackupError as e:
         await log_action(request, staff, "restore_failed", name, error=str(e))
-        return go("/admin/backups", f"Восстановление не выполнено, база не изменена: {e}")
-    await admin_of(request).audit(staff.user.id, "restore", name, {"safety_copy": safety.name}, ip_of(request))
-    log.warning("База восстановлена из %s сотрудником #%s (копия перед восстановлением: %s)",
-                name, staff.user.id, safety.name)
-    return go("/admin/backups", f"База восстановлена из {name}. Копия до восстановления: {safety.name}. "
-                                f"Если вас выбросило из панели — войдите заново.")
+        return go(request, "/backups", f"Восстановление не выполнено, база не изменена: {e}")
+    await admin_of(request).audit(staff.login, "restore", name, {"safety_copy": safety.name}, ip_of(request))
+    log.warning("База восстановлена из %s сотрудником %s (копия перед восстановлением: %s)",
+                name, staff.login, safety.name)
+    return go(request, "/backups", f"База восстановлена из {name}. Копия до восстановления: {safety.name}. "
+                                   f"Если вас выбросило из панели — войдите заново.")
 
 
 @router.post("/backups/{name}/delete")
@@ -365,29 +412,14 @@ async def backup_delete(request: Request, name: str):
     try:
         backups.delete_backup(svc(request).settings, name)
     except backups.BackupError as e:
-        return go("/admin/backups", str(e))
+        return go(request, "/backups", str(e))
     await log_action(request, staff, "backup_delete", name)
-    return go("/admin/backups", "Удалено")
+    return go(request, "/backups", "Удалено")
 
 
 # ---------------------------------------------------------------- сотрудники и журнал
 @router.get("/staff", response_class=HTMLResponse)
 async def staff_page(request: Request):
     staff = await require_staff(request)
-    a = admin_of(request)
-    return render(request, "staff.html", staff, members=await a.staff(), audit=await a.audit_log(200))
-
-
-@router.post("/staff/add")
-async def staff_add(request: Request):
-    staff = await require_staff(request, admin=True)
-    f = await form_data(request)
-    who = (f.get("who") or "").strip()
-    rows = await admin_of(request).search_clients(who, limit=2)
-    exact = [r.user for r in rows if who.lower() in ((r.user.email or "").lower(), str(r.user.id))]
-    if len(exact) != 1:
-        return go("/admin/staff", "Пользователь не найден: укажите номер в системе или точную почту")
-    role = f.get("role") if f.get("role") in ROLES else "support"
-    await admin_of(request).set_staff_role(exact[0].id, role)
-    await log_action(request, staff, "role", f"user:{exact[0].id}", role=role)
-    return go("/admin/staff", f"Пользователь №{exact[0].id} — {ROLES[role]}. При входе в панель он подключит 2FA.")
+    return render(request, "staff.html", staff, members=list(accounts_of(request).values()),
+                  audit=await admin_of(request).audit_log(200))

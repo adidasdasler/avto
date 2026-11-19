@@ -80,8 +80,6 @@ class Settings(BaseSettings):
     contact_phone: str = ""
 
     # Личный кабинет и каталог
-    # id пользователей-администраторов (видны в кабинете), через запятую: модерация анкет
-    admin_user_ids: str = ""
     # анонимные экспресс-проверки с сайта хранятся N дней, проверки пользователей — бессрочно
     anon_checks_retention_days: int = 30
 
@@ -110,13 +108,20 @@ class Settings(BaseSettings):
     alert_repeat_hours: float = 3  # повторять ту же тревогу не чаще
     balance_probe_minutes: int = 30  # узнавать баланс бесплатным тестовым запросом
 
-    # Панель администратора
+    # Панель администратора: секретный адрес и сотрудники только из .env (см. shturman/admin/accounts.py)
+    admin_path: str = ""  # например /ops-k7f2x9q4m1; пусто — панель выключена
+    admin_users: str = ""  # создаётся командой: python -m shturman.admin.cli add <логин>
+    admin_allowed_ips: str = ""  # необязательно: IP или подсети через запятую — с остальных панель не откроется
+    # Кому слать тревоги: ID в MAX (бот отвечает на /id) и chat_id в Telegram, через запятую
+    alert_max_user_ids: str = ""
+    alert_tg_chat_ids: str = ""
     backup_dir: str = "./backups"  # в Docker — /app/backups (смонтировано в /opt/shturman/backups)
     staff_mfa_hours: int = 12  # сколько часов действует пройденная 2FA в сессии сотрудника
 
     @property
-    def admins(self) -> set[int]:
-        return {int(x) for x in self.admin_user_ids.replace(" ", "").split(",") if x.isdigit()}
+    def admin_prefix(self) -> str:
+        p = "/" + self.admin_path.strip().strip("/")
+        return "" if p == "/" else p
 
     # Цены, ₽
     price_basic: int = 199

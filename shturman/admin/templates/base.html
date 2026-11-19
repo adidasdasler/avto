@@ -57,13 +57,13 @@
 <div class="layout">
 <aside>
   <div class="logo">{{ brand }} <small>{{ roles[staff.role] }}</small></div>
-  {% for href, title, key in [('/admin', 'Сводка', 'g d'), ('/admin/clients', 'Клиенты', 'g c'), ('/admin/orders', 'Заказы', 'g o'),
-                              ('/admin/pros', 'Анкеты', 'g m'), ('/admin/backups', 'Бэкапы', 'g b'), ('/admin/staff', 'Сотрудники', 'g s')] %}
-  <a class="nav {{ 'on' if path == href }}" href="{{ href }}">{{ title }} <kbd>{{ key }}</kbd></a>
+  {% for href, title, key in [('', 'Сводка', 'g d'), ('/clients', 'Клиенты', 'g c'), ('/orders', 'Заказы', 'g o'),
+                              ('/pros', 'Анкеты', 'g m'), ('/backups', 'Бэкапы', 'g b'), ('/staff', 'Сотрудники', 'g s')] %}
+  <a class="nav {{ 'on' if path == A ~ href }}" href="{{ A }}{{ href }}">{{ title }} <kbd>{{ key }}</kbd></a>
   {% endfor %}
   <a class="nav" href="/" target="_blank">Открыть сайт ↗</a>
-  <div class="who">{{ staff.user.email or ('№' ~ staff.user.id) }}<br><a href="#" onclick="document.getElementById('help').style.display='grid';return false">Горячие клавиши <kbd>?</kbd></a>
-    <form method="post" action="/logout" style="margin-top:8px"><button class="btn sm ghost" style="color:var(--on-ink)">Выйти</button></form></div>
+  <div class="who">{{ staff.login }}<br><a href="#" onclick="document.getElementById('help').style.display='grid';return false">Горячие клавиши <kbd>?</kbd></a>
+    <form method="post" action="{{ A }}/logout" style="margin-top:8px"><button class="btn sm ghost" style="color:var(--on-ink)">Выйти</button></form></div>
 </aside>
 <main>
   {% for w in warnings %}<div class="warn" role="alert"><b>Внимание:</b> {{ w }}</div>{% endfor %}
@@ -71,7 +71,7 @@
   {% block content %}{% endblock %}
 </main>
 </div>
-<form id="hk-backup" method="post" action="/admin/actions/backup" hidden></form>
+<form id="hk-backup" method="post" action="{{ A }}/actions/backup" hidden></form>
 <div id="help" onclick="if(event.target===this)this.style.display='none'">
   <div class="card keys">
     <h2>Горячие клавиши</h2>
@@ -82,7 +82,8 @@
 </div>
 <script>
 (() => {
-  const go = {d: '/admin', c: '/admin/clients', o: '/admin/orders', m: '/admin/pros', b: '/admin/backups', s: '/admin/staff'};
+  const A = {{ A|tojson }};
+  const go = {d: A, c: A + '/clients', o: A + '/orders', m: A + '/pros', b: A + '/backups', s: A + '/staff'};
   let prefix = null, timer = null;
   document.addEventListener('keydown', e => {
     const t = e.target;
@@ -90,7 +91,7 @@
     const help = document.getElementById('help');
     if (e.key === 'Escape') { help.style.display = 'none'; return; }
     if (e.key === '?') { help.style.display = help.style.display === 'grid' ? 'none' : 'grid'; return; }
-    if (e.key === '/') { e.preventDefault(); location.href = '/admin/clients#search'; return; }
+    if (e.key === '/') { e.preventDefault(); location.href = A + '/clients#search'; return; }
     if (prefix === 'g' && go[e.key]) { location.href = go[e.key]; prefix = null; return; }
     if (prefix === 'n' && e.key === 'b') { prefix = null;
       if (confirm('Создать бэкап базы сейчас?')) document.getElementById('hk-backup').submit(); return; }

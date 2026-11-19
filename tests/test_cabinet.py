@@ -99,6 +99,8 @@ PRO = {"kind": "selector", "name": "Иван Подбор", "city": "москв�
 
 
 def test_pro_profile_moderation_catalog(settings):
+    from tests.test_admin import staff_env
+    staff_env(settings)
     with make_client(settings) as client:
         owner = login_as(client, max_id=200)
         r = client.post("/cabinet/pro", data=PRO)  # без согласия
@@ -113,10 +115,10 @@ def test_pro_profile_moderation_catalog(settings):
 
         client.cookies.clear()
         assert client.get(f"/pros/{slug}").status_code == 404  # остальным — нет
-        from tests.test_admin import staff_login
-        staff_login(client, email="mod@vincv.ru", role="support")
-        assert "Иван Подбор" in client.get("/admin/pros").text
-        client.post(f"/admin/pros/{client.portal.call(client.app.state.pros.by_user, owner.id).id}",
+        from tests.test_admin import P, staff_login
+        staff_login(client, "help")
+        assert "Иван Подбор" in client.get(P + "/pros").text
+        client.post(f"{P}/pros/{client.portal.call(client.app.state.pros.by_user, owner.id).id}",
                     data={"action": "approve"})
         client.cookies.clear()
 

@@ -7,11 +7,11 @@
 <div class="card" style="margin-bottom:14px">
   <h2>Быстрые действия</h2>
   <div style="display:flex;flex-wrap:wrap;gap:8px">
-    <form class="inline" method="post" action="/admin/actions/backup" onsubmit="return confirm('Создать бэкап базы сейчас?')"><button class="btn amber">Создать бэкап <kbd>n b</kbd></button></form>
-    <a class="btn" href="/admin/clients#search">Найти клиента <kbd>/</kbd></a>
-    <form class="inline" method="post" action="/admin/actions/payments"><button class="btn ghost">Проверить оплаты</button></form>
-    <form class="inline" method="post" action="/admin/actions/cleanup" onsubmit="return confirm('Удалить истёкший кэш и старые анонимные проверки?')"><button class="btn ghost">Очистить кэш и старые данные</button></form>
-    {% if staff.is_admin %}<a class="btn ghost" href="/admin/backups">Восстановить из бэкапа…</a>{% endif %}
+    <form class="inline" method="post" action="{{ A }}/actions/backup" onsubmit="return confirm('Создать бэкап базы сейчас?')"><button class="btn amber">Создать бэкап <kbd>n b</kbd></button></form>
+    <a class="btn" href="{{ A }}/clients#search">Найти клиента <kbd>/</kbd></a>
+    <form class="inline" method="post" action="{{ A }}/actions/payments"><button class="btn ghost">Проверить оплаты</button></form>
+    <form class="inline" method="post" action="{{ A }}/actions/cleanup" onsubmit="return confirm('Удалить истёкший кэш и старые анонимные проверки?')"><button class="btn ghost">Очистить кэш и старые данные</button></form>
+    {% if staff.is_admin %}<a class="btn ghost" href="{{ A }}/backups">Восстановить из бэкапа…</a>{% endif %}
   </div>
   <p class="hint" style="margin:10px 0 0">Последний бэкап: {% if last_backup %}<b>{{ last_backup.created|dt }}</b> ({{ last_backup.name }}){% else %}<b style="color:var(--red)">ещё не было</b>{% endif %} ·
     свободно на диске: {{ disk[0]|size }} из {{ disk[1]|size }}</p>
@@ -27,8 +27,8 @@
     {% else %}<b>—</b><span>появится после первой платной проверки</span>{% endif %}</div>
   <div class="card stat"><span>Клиентов</span><b>{{ s.users }}</b><span>+{{ s.users_7d }} за неделю</span></div>
   <div class="card stat"><span>Проверок сегодня</span><b>{{ s.checks_today }}</b><span>{{ s.checks_7d }} за неделю · полных {{ s.full_7d }}</span></div>
-  <div class="card stat"><span>Ждут оплаты / не доставлены</span><b>{{ s.pending_orders }} / <span style="{{ 'color:var(--red)' if s.undelivered }}">{{ s.undelivered }}</span></b><span><a href="/admin/orders?status=undelivered">не доставленные →</a></span></div>
-  <div class="card stat"><span>Анкеты</span><b>{{ s.pros_pending }} <span class="hint">на модерации</span></b><span>{{ s.pros_live }} опубликовано · <a href="/admin/pros">открыть →</a></span></div>
+  <div class="card stat"><span>Ждут оплаты / не доставлены</span><b>{{ s.pending_orders }} / <span style="{{ 'color:var(--red)' if s.undelivered }}">{{ s.undelivered }}</span></b><span><a href="{{ A }}/orders?status=undelivered">не доставленные →</a></span></div>
+  <div class="card stat"><span>Анкеты</span><b>{{ s.pros_pending }} <span class="hint">на модерации</span></b><span>{{ s.pros_live }} опубликовано · <a href="{{ A }}/pros">открыть →</a></span></div>
 </div>
 
 <div class="grid g2">
@@ -42,8 +42,8 @@
   <div class="card">
     <h2>Последние действия сотрудников</h2>
     {% if audit %}<table>
-      {% for a in audit %}<tr><td style="white-space:nowrap">{{ a.created_at|dt }}</td><td>№{{ a.staff_user_id }}</td><td><b>{{ a.action }}</b> {{ a.target or '' }}</td></tr>{% endfor %}
-    </table><p class="hint"><a href="/admin/staff">Весь журнал →</a></p>{% else %}<p class="muted">Пока пусто.</p>{% endif %}
+      {% for a in audit %}<tr><td style="white-space:nowrap">{{ a.created_at|dt }}</td><td>{{ a.staff_login or '—' }}</td><td><b>{{ a.action }}</b> {{ a.target or '' }}</td></tr>{% endfor %}
+    </table><p class="hint"><a href="{{ A }}/staff">Весь журнал →</a></p>{% else %}<p class="muted">Пока пусто.</p>{% endif %}
   </div>
 </div>
 

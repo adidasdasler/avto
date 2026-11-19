@@ -144,6 +144,8 @@ class MaxBot:
             await self.on_start(ctx, text[6:].strip())
         elif cmd == "/help":
             await self.say(ctx, HELP)
+        elif cmd == "/id":  # для ALERT_MAX_USER_IDS — куда слать тревоги сотрудникам
+            await self.say(ctx, f"Ваш ID в MAX: <code>{ctx.user_id}</code>")
         elif cmd == "/tariffs":
             await self.say(ctx, tariffs_text(self.settings), packs_buttons(self.settings))
         elif cmd == "/balance":

@@ -59,12 +59,6 @@ async def require_user(request: Request) -> User:
     return user
 
 
-def is_admin(request: Request, user: User | None) -> bool:
-    """Сотрудник (поддержка или администратор) — для ссылки «Панель» и просмотра неопубликованных анкет."""
-    from ..admin.service import effective_role
-    return effective_role(user, svc(request).settings) is not None
-
-
 async def form_data(request: Request) -> dict[str, str]:
     """Разбор application/x-www-form-urlencoded без python-multipart; заодно проверка Origin (CSRF)."""
     origin = request.headers.get("origin") or request.headers.get("referer")
@@ -76,7 +70,7 @@ async def form_data(request: Request) -> dict[str, str]:
 
 def render(request: Request, name: str, user: User | None = None, **ctx: Any) -> HTMLResponse:
     s = svc(request).settings
-    html = _env.get_template(name).render(brand=s.brand_name, user=user, is_admin=is_admin(request, user),
+    html = _env.get_template(name).render(brand=s.brand_name, user=user,
                                           msg=request.query_params.get("msg"), kinds=KINDS, **ctx)
     return HTMLResponse(html)
 
@@ -484,7 +478,7 @@ async def pros_catalog(request: Request, city: str = "", kind: str = "", q: str 
 async def _visible_profile(request: Request, slug: str) -> tuple[ProProfile, User | None]:
     p = await pros_of(request).by_slug(slug)
     user = await current_user(request)
-    if p is None or (p.status != "approved" and not (user and (user.id == p.user_id or is_admin(request, user)))):
+    if p is None or (p.status != "approved" and not (user and user.id == p.user_id)):
         raise HTTPException(404, "Анкета не найдена")
     return p, user
 
@@ -514,11 +508,9 @@ LEGAL_UPDATED = "19.11.2026"
 async def legal_page(request: Request, page: str) -> HTMLResponse:
     user = await current_user(request)
     st = svc(request).settings
-    required = {"LEGAL_NAME": st.legal_name, "LEGAL_INN": st.legal_inn, "CONTACT_EMAIL": st.contact_email}
-    missing = [k for k, val in required.items() if not val] if is_admin(request, user) else []
     bots = [(n, u.split("?")[0]) for n, u in messenger_links(request, "x")]
     return render(request, "legal.html", user=user, page=page, title=LEGAL_PAGES[page], updated=LEGAL_UPDATED,
-                  L=st, site=st.public_base_url.split("://")[-1].rstrip("/"), missing=missing, bots=bots,
+                  L=st, site=st.public_base_url.split("://")[-1].rstrip("/"), bots=bots,
                   products=list(products(st).values()))
 
 
@@ -539,7 +531,7 @@ async def contacts(request: Request):
 
 @router.get("/robots.txt", response_class=PlainTextResponse)
 async def robots(request: Request) -> str:
-    return ("User-agent: *\nDisallow: /cabinet\nDisallow: /admin\nDisallow: /r/\nDisallow: /auth/\n"
+    return ("User-agent: *\nDisallow: /cabinet\nDisallow: /r/\nDisallow: /auth/\n"
             "Disallow: /pay/\nDisallow: /api/\n"
             f"Sitemap: {site_url(request, '/sitemap.xml')}\n")
 

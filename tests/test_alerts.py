@@ -67,8 +67,8 @@ async def test_mock_mode_has_no_alerts(db, settings):
 async def test_dedupe_and_notify_staff(db, settings):
     live(settings)
     settings.max_bot_token = "MAXTOKEN"
+    settings.alert_max_user_ids = "777"
     async with db.session() as s:
-        s.add(User(max_id=777, staff_role="support"))
         s.add(User(max_id=888))  # обычный клиент — ему не пишем
         await s.commit()
     route = respx.post("https://platform-api.max.ru/messages").mock(return_value=httpx.Response(200, json={}))
@@ -96,9 +96,8 @@ async def test_probe_balance(db, settings):
 
 
 def test_alert_banner_in_panel(settings):
-    from tests.test_admin import staff_login
-    from tests.test_cabinet import make_client
-    with make_client(settings) as client:
+    from tests.test_admin import P, make_panel, staff_login
+    with make_panel(settings) as client:
         staff_login(client)
 
         async def add():
@@ -106,4 +105,4 @@ def test_alert_banner_in_panel(settings):
                 s.add(SystemAlert(key="token_leak", level="critical", message="Возможно, токен утёк"))
                 await s.commit()
         client.portal.call(add)
-        assert "Возможно, токен утёк" in client.get("/admin").text
+        assert "Возможно, токен утёк" in client.get(P).text

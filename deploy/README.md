@@ -66,6 +66,23 @@ docker compose logs -f max-bot
 
 Алгоритм расчёта хеша — тот же, что `ROBOKASSA_HASH` в `.env` (по умолчанию MD5).
 
+## 6. Панель администратора
+
+Адрес и сотрудники — только в `.env`, управление из терминала сервера (QR-код для 2FA показывается прямо там):
+
+```bash
+cd /opt/shturman
+./deploy/admin.sh init                    # секретный адрес панели
+./deploy/admin.sh add ivan --role admin   # пароль (дважды) → QR → проверка кода
+./deploy/admin.sh add olga --role support
+docker compose up -d api                  # применить
+./deploy/admin.sh list                    # адрес панели и список сотрудников
+```
+
+Потерян телефон — `reset-2fa ivan`; новый пароль — `passwd ivan`; уволился — `remove olga`; после каждой
+команды `docker compose up -d api`. Чтобы панель открывалась только с ваших адресов, добавьте в `.env`
+`ADMIN_ALLOWED_IPS=1.2.3.4,5.6.7.0/24`. Тревоги в MAX: напишите боту `/id` и укажите номер в `ALERT_MAX_USER_IDS`.
+
 ## Обслуживание
 | Что | Команда |
 |---|---|

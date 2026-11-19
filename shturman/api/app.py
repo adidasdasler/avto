@@ -39,6 +39,21 @@ class CheckIn(BaseModel):
     query: str = Field(min_length=3, max_length=512)
 
 
+def admin_status(settings: Settings) -> None:
+    from ..admin import accounts
+    raw = [r for r in settings.admin_users.replace("\n", ";").split(";") if r.strip()]
+    parsed = accounts.parse(settings.admin_users)
+    if len(parsed) != len(raw):
+        log.error("ADMIN_USERS: %d записей из %d не распознаны — создайте их заново командой "
+                  "python -m shturman.admin.cli add <логин>", len(raw) - len(parsed), len(raw))
+    if not settings.admin_prefix:
+        log.info("Панель администратора выключена (ADMIN_PATH не задан)")
+    elif len(settings.admin_prefix) < 13:
+        log.warning("ADMIN_PATH слишком короткий и угадываемый — сгенерируйте: python -m shturman.admin.cli init")
+    elif not parsed:
+        log.warning("Панель включена, но в ADMIN_USERS нет ни одного сотрудника — адрес отвечает 404")
+
+
 def payment_warnings(settings: Settings) -> list[str]:
     """Опасные для боевого сайта настройки оплаты."""
     if not settings.public_base_url.startswith("https://"):
@@ -90,6 +105,7 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         for warning in payment_warnings(settings):
             log.warning("ВНИМАНИЕ: %s", warning)
         app.state.pros = ProService(db)
+        admin_status(settings)
         bg = asyncio.create_task(background(app)) if run_background else None
         yield
         if bg:
@@ -98,7 +114,8 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         await db.dispose()
 
     app = FastAPI(title=settings.brand_name, lifespan=lifespan)
-    app.include_router(admin_router)
+    if settings.admin_prefix:  # без ADMIN_PATH панели нет вовсе, /admin — обычная 404
+        app.include_router(admin_router, prefix=settings.admin_prefix)
     app.include_router(web_router)
     landing_env = Environment(loader=FileSystemLoader(LANDING_DIR), autoescape=select_autoescape(["html"]))
 

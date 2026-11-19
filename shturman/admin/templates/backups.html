@@ -3,7 +3,7 @@
 {% block content %}
 <h1>Бэкапы базы</h1>
 <div class="card" style="margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-  <form class="inline" method="post" action="/admin/actions/backup"><button class="btn amber">Создать бэкап сейчас <kbd>n b</kbd></button></form>
+  <form class="inline" method="post" action="{{ A }}/actions/backup"><button class="btn amber">Создать бэкап сейчас <kbd>n b</kbd></button></form>
   <span class="hint">Автоматически — каждую ночь в 03:30, хранятся 14 дней. Свободно: {{ disk[0]|size }} из {{ disk[1]|size }}.</span>
 </div>
 <div class="card scroll">
@@ -13,16 +13,16 @@
     <tr><td><code>{{ f.name }}</code></td><td style="white-space:nowrap">{{ f.created|dt }}</td><td>{{ f.size|size }}</td>
       <td style="white-space:nowrap">
       {% if staff.is_admin %}
-        <a class="btn sm ghost" href="/admin/backups/{{ f.name }}">Скачать</a>
+        <a class="btn sm ghost" href="{{ A }}/backups/{{ f.name }}">Скачать</a>
         <details style="display:inline-block;vertical-align:top"><summary class="btn sm danger" style="list-style:none">Восстановить…</summary>
-          <form method="post" action="/admin/backups/{{ f.name }}/restore" class="card" style="position:absolute;right:28px;z-index:5;width:340px;display:grid;gap:8px;margin-top:6px">
+          <form method="post" action="{{ A }}/backups/{{ f.name }}/restore" class="card" style="position:absolute;right:28px;z-index:5;width:340px;display:grid;gap:8px;margin-top:6px">
             <b>Восстановить базу из {{ f.name }}?</b>
             <span class="hint">Все изменения после {{ f.created|dt }} пропадут (оплаты, проверки, регистрации). Перед восстановлением автоматически сохранится копия текущей базы.</span>
             <input type="text" name="code" placeholder="Код из приложения 2FA" inputmode="numeric" autocomplete="one-time-code" required>
             <input type="text" name="confirm" placeholder="Введите слово ВОССТАНОВИТЬ" required>
             <button class="btn danger">Восстановить</button>
           </form></details>
-        <form class="inline" method="post" action="/admin/backups/{{ f.name }}/delete" onsubmit="return confirm('Удалить {{ f.name }}?')"><button class="btn sm ghost">Удалить</button></form>
+        <form class="inline" method="post" action="{{ A }}/backups/{{ f.name }}/delete" onsubmit="return confirm('Удалить {{ f.name }}?')"><button class="btn sm ghost">Удалить</button></form>
       {% else %}<span class="hint">Скачивание и восстановление — у администратора</span>{% endif %}
       </td></tr>
     {% else %}<tr><td colspan="4" class="muted">Бэкапов пока нет — создайте первый.</td></tr>{% endfor %}

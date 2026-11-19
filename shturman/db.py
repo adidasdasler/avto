@@ -208,11 +208,29 @@ class AdminAudit(Base):
     __tablename__ = "admin_audit"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     staff_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    staff_login: Mapped[str | None] = mapped_column(String(32), index=True)
     action: Mapped[str] = mapped_column(String(48))
     target: Mapped[str | None] = mapped_column(String(120))
     details: Mapped[dict[str, Any] | None] = mapped_column()
     ip: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class AdminSession(Base):
+    """Сессия сотрудника панели (логины — из ADMIN_USERS в .env, не аккаунты сайта)."""
+    __tablename__ = "admin_sessions"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    login: Mapped[str] = mapped_column(String(32), index=True)
+    ip: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+
+class AdminTotpState(Base):
+    """Последний принятый шаг TOTP для логина — код нельзя использовать повторно."""
+    __tablename__ = "admin_totp_state"
+    login: Mapped[str] = mapped_column(String(32), primary_key=True)
+    last_counter: Mapped[int] = mapped_column(BigInteger)
 
 
 class SystemAlert(Base):

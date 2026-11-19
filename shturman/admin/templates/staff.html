@@ -6,30 +6,22 @@
   <div class="card">
     <h2>Сотрудники</h2>
     <table>
-      {% for m in members %}<tr><td><a href="/admin/clients/{{ m.id }}">№{{ m.id }}</a></td><td>{{ m.email or '—' }}</td>
-        <td>{{ roles.get(m.staff_role) or 'Администратор (ADMIN_USER_IDS)' }}</td>
-        <td>{% if m.totp_enabled_at %}<span class="pill green">2FA</span>{% else %}<span class="pill amber">2FA не подключена</span>{% endif %}</td></tr>
-      {% endfor %}
+      <tr><th>Логин</th><th>Роль</th></tr>
+      {% for m in members %}<tr><td><b>{{ m.login }}</b>{% if m.login == staff.login %} <span class="hint">(вы)</span>{% endif %}</td><td>{{ roles[m.role] }}</td></tr>{% endfor %}
     </table>
   </div>
-  {% if staff.is_admin %}
   <div class="card">
-    <h2>Добавить сотрудника</h2>
-    <p class="hint">Человек сначала регистрируется на сайте с почтой и паролем. Затем укажите его почту или номер в системе.</p>
-    <form method="post" action="/admin/staff/add" style="display:grid;gap:8px">
-      <input type="text" name="who" placeholder="Почта или номер в системе" required>
-      <select name="role">{% for k, t in roles.items() %}<option value="{{ k }}">{{ t }}</option>{% endfor %}</select>
-      <button class="btn">Назначить</button>
-    </form>
-    <p class="hint">Поддержка: клиенты, начисления, заказы, анкеты, создание бэкапов. Администратор — ещё восстановление, скачивание бэкапов и управление сотрудниками.</p>
+    <h2>Как добавить или убрать</h2>
+    <p class="hint">Сотрудники задаются только в <code>.env</code> на сервере (ADMIN_USERS) — из панели их не добавить, и аккаунты сайта к панели доступа не имеют.</p>
+    <p class="hint">Новый сотрудник: <code>./deploy/admin.sh add логин --role support</code> — команда спросит пароль и покажет QR-код для приложения. Удалить: <code>./deploy/admin.sh remove логин</code>. После изменений: <code>docker compose up -d api</code>.</p>
+    <p class="hint">Поддержка: клиенты, начисления, заказы, анкеты, создание бэкапов. Администратор — ещё скачивание, восстановление и удаление бэкапов.</p>
   </div>
-  {% endif %}
 </div>
 <div class="card scroll">
   <h2>Журнал действий</h2>
   <table>
     <tr><th>Когда</th><th>Сотрудник</th><th>Действие</th><th>Объект</th><th>Детали</th><th>IP</th></tr>
-    {% for a in audit %}<tr><td style="white-space:nowrap">{{ a.created_at|dt }}</td><td>№{{ a.staff_user_id }}</td><td><b>{{ a.action }}</b></td>
+    {% for a in audit %}<tr><td style="white-space:nowrap">{{ a.created_at|dt }}</td><td>{{ a.staff_login or '—' }}</td><td><b>{{ a.action }}</b></td>
       <td>{{ a.target or '' }}</td><td class="hint">{{ a.details|details }}</td><td class="hint">{{ a.ip or '' }}</td></tr>
     {% else %}<tr><td colspan="6" class="muted">Пока пусто.</td></tr>{% endfor %}
   </table>
