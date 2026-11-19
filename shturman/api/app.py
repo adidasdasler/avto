@@ -26,7 +26,7 @@ from ..auth import AuthService
 from ..maintenance import cleanup
 from ..orders import OrderService, make_robokassa
 from ..pros import ProService
-from ..web.routes import COOKIE, deliver_web_orders, router as web_router
+from ..web.routes import COOKIE, deliver_web_orders, rate_limited, router as web_router
 from ..services import CheckService, LimitExceeded
 
 log = logging.getLogger(__name__)
@@ -35,6 +35,19 @@ LANDING_DIR = Path(__file__).resolve().parents[2] / "landing"
 
 class CheckIn(BaseModel):
     query: str = Field(min_length=3, max_length=512)
+
+
+def payment_warnings(settings: Settings) -> list[str]:
+    """Опасные для боевого сайта настройки оплаты."""
+    if not settings.public_base_url.startswith("https://"):
+        return []
+    out = []
+    if settings.dev_fake_payments:
+        out.append("DEV_FAKE_PAYMENTS=true — кнопки покупки выдают отчёты бесплатно. Выключите на боевом сайте.")
+    if settings.robokassa_login and settings.robokassa_test:
+        out.append("ROBOKASSA_TEST=true — принимаются тестовые платежи без денег. "
+                   "Для приёма оплат поставьте false и боевые пароли.")
+    return out
 
 
 async def background(app: FastAPI, interval: float = 15.0) -> None:
@@ -64,6 +77,8 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         app.state.service = CheckService(db, prov, settings)
         app.state.orders = OrderService(db, settings, make_robokassa(settings))
         app.state.auth = AuthService(db)
+        for warning in payment_warnings(settings):
+            log.warning("ВНИМАНИЕ: %s", warning)
         app.state.pros = ProService(db)
         bg = asyncio.create_task(background(app)) if run_background else None
         yield
@@ -140,11 +155,22 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
     async def robokassa_result(request: Request) -> str:
         orders: OrderService = request.app.state.orders
         params = await _rk_params(request)
+        ip = client_ip(request)
         if orders.robokassa is None or not orders.robokassa.check_result(params):
+            log.warning("Robokassa ResultURL: неверная подпись от %s, InvId=%s", ip, params.get("InvId"))
             raise HTTPException(400, "bad sign")
+        if str(params.get("IsTest", "")).lower() in ("1", "true") and not settings.robokassa_test:
+            # Тестовые платежи на боевом магазине не засчитываем.
+            log.error("Robokassa ResultURL: тестовый платёж при выключенном тестовом режиме, InvId=%s, IP %s",
+                      params.get("InvId"), ip)
+            raise HTTPException(400, "test payment")
+        if not str(params.get("InvId", "")).isdigit():
+            raise HTTPException(400, "bad InvId")
         inv_id = int(params["InvId"])
         order = await orders.mark_paid(inv_id, params.get("OutSum"))
         if order is None:
+            log.error("Robokassa ResultURL: заказ #%s не найден или сумма %s не совпала (IP %s)",
+                      inv_id, params.get("OutSum"), ip)
             raise HTTPException(400, "unknown order or amount")
         return f"OK{inv_id}"
 
@@ -185,6 +211,8 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         c = await s.get_check(check_id) if _id_re.match(check_id) else None
         if c is None:
             raise HTTPException(404, "Отчёт не найден")
+        if rate_limited(request, "pdf", limit=30, window=600):  # сборка PDF нагружает процессор
+            raise HTTPException(429, "Слишком много запросов, попробуйте через несколько минут")
         pdf = await s.pdf(c)
         name = f"report-{c.vin or c.id[:8]}-{TIER_TITLES[c.tier]}.pdf"
         return Response(pdf, media_type="application/pdf",

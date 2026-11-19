@@ -1,10 +1,10 @@
-"""Тарифы, продукты и права доступа (бесплатный лимит, пакеты, безлимит на сутки)."""
+"""Тарифы, продукты и права доступа (бесплатный лимит, разовые отчёты, пакеты)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import Settings
@@ -33,8 +33,6 @@ def products(s: Settings) -> dict[str, Product]:
         Product("pack_10", "Пакет 10 отчётов", s.price_pack_10, credits=10, description="10 отчётов «Досье»"),
         Product("pack_25", "Пакет 25 отчётов", s.price_pack_25, credits=25, description="25 отчётов «Досье»"),
         Product("pack_50", "Пакет 50 отчётов", s.price_pack_50, credits=50, description="50 отчётов «Досье»"),
-        Product("unlimited_day", "Безлимит на сутки", s.price_unlimited_day, unlimited_hours=24,
-                description="Неограниченные отчёты «Досье» 24 часа"),
     ]
     return {p.code: p for p in items}
 
@@ -43,10 +41,16 @@ def has_unlimited(user: User | None, now: datetime | None = None) -> bool:
     return bool(user and user.unlimited_until and user.unlimited_until > (now or utcnow()))
 
 
+def _today_checks():
+    start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    return select(func.count()).select_from(Check).where(Check.created_at >= start, Check.tier == "express",
+                                                         Check.source != "example")
+
+
 async def free_checks_used_today(session: AsyncSession, *, user_id: int | None = None,
                                  client_ip: str | None = None) -> int:
-    start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    q = select(func.count()).select_from(Check).where(Check.created_at >= start)
+    """Экспресс-проверки за сутки: по аккаунту, а без аккаунта — по IP."""
+    q = _today_checks()
     if user_id is not None:
         q = q.where(Check.user_id == user_id)
     elif client_ip is not None:
@@ -56,32 +60,52 @@ async def free_checks_used_today(session: AsyncSession, *, user_id: int | None =
     return int((await session.execute(q)).scalar_one())
 
 
+async def free_checks_from_ip_today(session: AsyncSession, client_ip: str) -> int:
+    """Все экспресс-проверки с IP, со входом и без: защита от «ферм» аккаунтов."""
+    return int((await session.execute(_today_checks().where(Check.client_ip == client_ip))).scalar_one())
+
+
+async def free_checks_total_today(session: AsyncSession) -> int:
+    return int((await session.execute(_today_checks())).scalar_one())
+
+
 def can_use_credit(user: User | None, tier: str) -> bool:
-    """Кредит из пакета или безлимит покрывают отчёты до уровня «Досье» включительно."""
+    """Отчёт из пакета покрывает уровни до «Досье» включительно.
+    Безлимит больше не продаётся, но ранее купленный действует до конца срока."""
     if tier not in ("basic", "dossier") or user is None:
         return False
     return has_unlimited(user) or user.credits > 0
 
 
-def consume_credit(user: User, tier: str) -> str:
+async def take_credit(session: AsyncSession, user_id: int, tier: str) -> str:
+    """Атомарно списывает отчёт из пакета: «уменьшить на 1, только если больше нуля» одним запросом.
+    Параллельные запросы не смогут потратить один отчёт дважды."""
+    if tier not in ("basic", "dossier"):
+        raise PermissionError("Пакет покрывает отчёты до уровня «Досье»")
+    user = await session.get(User, user_id)
     if has_unlimited(user):
         return "unlimited"
-    if user.credits > 0 and tier in ("basic", "dossier"):
-        user.credits -= 1
-        return "credit"
-    raise PermissionError("Нет доступных отчётов в пакете")
+    res = await session.execute(update(User).where(User.id == user_id, User.credits > 0)
+                                .values(credits=User.credits - 1))
+    if res.rowcount != 1:
+        raise PermissionError("Нет доступных отчётов в пакете")
+    return "credit"
+
+
+async def add_credits(session: AsyncSession, user_id: int, n: int) -> None:
+    await session.execute(update(User).where(User.id == user_id).values(credits=User.credits + n))
 
 
 async def apply_payment(session: AsyncSession, user: User, product: Product, *, check_id: str | None,
                         charge_id: str | None, provider: str = "telegram") -> Payment:
-    """Регистрирует оплату и начисляет кредиты/безлимит. Идемпотентно по charge_id."""
+    """Регистрирует оплату и начисляет отчёты из пакета. Идемпотентно по charge_id."""
     if charge_id:
         existing = (await session.execute(
             select(Payment).where(Payment.provider_charge_id == charge_id))).scalar_one_or_none()
         if existing:
             return existing
     if product.credits:
-        user.credits += product.credits
+        await add_credits(session, user.id, product.credits)  # атомарно, без потери параллельных оплат
     if product.unlimited_hours:
         base = user.unlimited_until if has_unlimited(user) else utcnow()
         user.unlimited_until = base + timedelta(hours=product.unlimited_hours)

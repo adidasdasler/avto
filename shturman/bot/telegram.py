@@ -72,7 +72,7 @@ async def cmd_start(message: Message, command: CommandObject, service: CheckServ
         return
     if arg.startswith("chk_"):
         check = await service.find_by_short_id(arg[4:])
-        if check:
+        if check and check.user_id in (None, user.id):  # чужие проверки не показываем
             await service.attach(check.id, user.id)
             await message.answer(summary_text(check), reply_markup=offer_keyboard(check, user, settings))
             return
@@ -105,8 +105,8 @@ async def cb_legal(cq: CallbackQuery, service: CheckService, settings: Settings)
     await service.update_user(user.id, legal_status=status)
     extra = ("\nДля ИП и ООО можем выставить счёт и акт — напишите в поддержку."
              if status in ("ip", "llc") else "")
-    await cq.message.answer("Пакеты для подборщиков: отчёты уровня «Досье» дешевле разовых, "
-                            "а безлимит на сутки — для активного дня просмотров." + extra,
+    await cq.message.answer("Пакеты для подборщиков: отчёты уровня «Досье» дешевле разовых — "
+                            "чем больше пакет, тем ниже цена отчёта." + extra,
                             reply_markup=packs_keyboard(settings))
     await cq.message.answer("Присылайте VIN — по одному или списком (каждый с новой строки).")
     await cq.answer()
@@ -275,6 +275,9 @@ async def cb_buy(cq: CallbackQuery, service: CheckService, settings: Settings, b
         return
     user = await service.tg_user(cq.from_user.id)
     check = await service.find_by_short_id(sid) if sid != "-" else None
+    if check is not None and check.user_id not in (None, user.id):
+        await cq.answer("Проверка не найдена", show_alert=True)
+        return
     if settings.dev_fake_payments and not settings.telegram_payment_token:
         await cq.answer("Тестовая оплата")
         await fulfil(cq.message, service, settings, user, product, check.id if check else None,

@@ -114,7 +114,8 @@ class AuthService:
             await s.commit()
             return user
 
-    async def set_email_password(self, user_id: int, email: str, password: str) -> User:
+    async def set_email_password(self, user_id: int, email: str, password: str,
+                                 keep_session: str | None = None) -> User:
         """Добавить вход по почте аккаунту, созданному через мессенджер."""
         email = normalize_email(email)
         pw = hash_password(password)
@@ -126,6 +127,8 @@ class AuthService:
             if user.email != email:
                 user.email_verified_at = None
             user.email, user.password_hash = email, pw
+            # Смена пароля закрывает все остальные сессии (на случай, если аккаунт был взломан).
+            await s.execute(delete(WebSession).where(WebSession.user_id == user_id, WebSession.id != (keep_session or "")))
             await s.commit()
             return user
 
@@ -155,6 +158,45 @@ class AuthService:
             if user and user.email_verified_at is None:
                 user.email_verified_at = utcnow()
                 await s.commit()
+
+    async def yandex_account(self, yandex_id: str, email: str | None, current_user_id: int | None,
+                             merge) -> int:
+        """Аккаунт для входа через Яндекс ID. merge(target_id, source_id) — объединение аккаунтов.
+
+        Защита от захвата аккаунта: к существующему аккаунту с той же почтой привязываемся, только если
+        почта в нём подтверждена. Неподтверждённый адрес мог зарегистрировать кто угодно — у такого
+        аккаунта адрес снимается, а владелец почты (подтверждённой Яндексом) получает свой аккаунт."""
+        async with self.db.session() as s:
+            by_id = (await s.execute(select(User).where(User.yandex_id == yandex_id))).scalar_one_or_none()
+        if current_user_id is not None:  # «Привязать Яндекс ID» из кабинета: владеет обоими — объединяем
+            if by_id is not None and by_id.id != current_user_id:
+                await merge(current_user_id, by_id.id)
+                return current_user_id
+            async with self.db.session() as s:
+                user = await s.get(User, current_user_id)
+                user.yandex_id = yandex_id
+                if email and user.email is None and not (await s.execute(select(User.id).where(User.email == email))).first():
+                    user.email, user.email_verified_at = email, utcnow()
+                elif email and user.email == email and user.email_verified_at is None:
+                    user.email_verified_at = utcnow()
+                await s.commit()
+            return current_user_id
+        if by_id is not None:
+            return by_id.id
+        async with self.db.session() as s:
+            if email:
+                same = (await s.execute(select(User).where(User.email == email))).scalar_one_or_none()
+                if same is not None and same.email_verified_at is not None:
+                    same.yandex_id = yandex_id
+                    await s.commit()
+                    return same.id
+                if same is not None:  # адрес не подтверждён — снимаем его с чужого аккаунта
+                    same.email = None
+                    await s.flush()
+            user = User(yandex_id=yandex_id, email=email, email_verified_at=utcnow() if email else None)
+            s.add(user)
+            await s.commit()
+            return user.id
 
     async def user_by_email(self, email: str) -> User | None:
         try:

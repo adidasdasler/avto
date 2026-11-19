@@ -6,7 +6,8 @@ from typing import Any
 
 from sqlalchemy import select
 
-from .billing import can_use_credit, consume_credit, free_checks_used_today, has_unlimited
+from .billing import (add_credits, free_checks_from_ip_today, free_checks_total_today, free_checks_used_today,
+                      has_unlimited, take_credit)
 from .cascade import Cascade, tier_index
 from .config import Settings
 from .db import Check, Database, User
@@ -113,6 +114,13 @@ class CheckService:
                 raise LimitExceeded(
                     f"Бесплатный лимит — {self.settings.free_checks_per_day} экспресс-проверки в сутки. "
                     "Купите полный отчёт или пакет, чтобы продолжить.")
+            async with self.db.session() as s:
+                if client_ip and await free_checks_from_ip_today(s, client_ip) >= self.settings.free_checks_per_ip_per_day:
+                    raise LimitExceeded("С вашего подключения сегодня уже сделано много бесплатных проверок. "
+                                        "Купите полный отчёт или пакет, чтобы продолжить.")
+                if await free_checks_total_today(s) >= self.settings.free_checks_global_per_day:
+                    raise LimitExceeded("Бесплатные проверки на сегодня закончились. "
+                                        "Купите полный отчёт или вернитесь завтра.")
         check = Check(user_id=user.id if user else None, client_ip=client_ip, source=source,
                       query=ident.source[:512], kind=ident.kind, tier="express")
         async with self.db.session() as s:
@@ -153,20 +161,20 @@ class CheckService:
         return await self._run(check_id, ident, tier)
 
     async def upgrade_with_credit(self, user_id: int, check_id: str, tier: str = "dossier") -> Check:
+        check = await self.get_check(check_id)
+        if check is None or check.user_id not in (None, user_id):
+            raise PermissionError("Проверка не найдена")
         async with self.db.session() as s:
-            user = await s.get(User, user_id)
-            if not can_use_credit(user, tier):
-                raise PermissionError("Нет доступных отчётов в пакете")
-            consume_credit(user, tier)
+            kind = await take_credit(s, user_id, tier)
             await s.commit()
         try:
+            await self.attach(check_id, user_id)
             return await self.upgrade(check_id, tier)
         except Exception:
-            async with self.db.session() as s:  # вернуть кредит, если отчёт не собрался
-                user = await s.get(User, user_id)
-                if not has_unlimited(user):
-                    user.credits += 1
-                await s.commit()
+            if kind == "credit":  # вернуть отчёт в пакет, если отчёт не собрался
+                async with self.db.session() as s:
+                    await add_credits(s, user_id, 1)
+                    await s.commit()
             raise
 
     async def attach(self, check_id: str, user_id: int) -> Check | None:

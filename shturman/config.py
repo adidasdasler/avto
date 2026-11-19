@@ -23,6 +23,9 @@ class Settings(BaseSettings):
 
     # Лимит бесплатных экспресс-проверок в сутки (на пользователя бота / IP лендинга)
     free_checks_per_day: int = 3
+    # Защита бюджета: каждая бесплатная проверка — платные запросы к avtovincod.ru
+    free_checks_per_ip_per_day: int = 10  # на IP, сколько бы аккаунтов с него ни заходило
+    free_checks_global_per_day: int = 300  # всего бесплатных проверок в сутки
 
     # Telegram
     telegram_bot_token: str = ""
@@ -55,6 +58,10 @@ class Settings(BaseSettings):
     # За обратным прокси (nginx) брать IP клиента из X-Forwarded-For
     trust_proxy_headers: bool = False
 
+    # Вход через Яндекс ID: приложение на oauth.yandex.ru, Redirect URI — <PUBLIC_BASE_URL>/auth/yandex/callback
+    yandex_client_id: str = ""
+    yandex_client_secret: str = ""
+
     # Почта (SMTP) — подтверждение адреса и сброс пароля
     smtp_host: str = ""
     smtp_port: int = 465
@@ -80,6 +87,7 @@ class Settings(BaseSettings):
 
     @field_validator("avc_token", "max_bot_token", "telegram_bot_token", "telegram_payment_token",
                      "robokassa_login", "robokassa_password1", "robokassa_password2", "smtp_password",
+                     "yandex_client_id", "yandex_client_secret",
                      mode="before")
     @classmethod
     def _clean_secret(cls, v: object, info) -> object:
@@ -104,7 +112,6 @@ class Settings(BaseSettings):
     price_pack_10: int = 850
     price_pack_25: int = 1950
     price_pack_50: int = 3500
-    price_unlimited_day: int = 1490
 
 
 @lru_cache

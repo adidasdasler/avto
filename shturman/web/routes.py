@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 import time
 from collections import defaultdict, deque
 from pathlib import Path
@@ -13,7 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Red
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import func, select
 
-from .. import mailer
+from .. import mailer, oauth_yandex
 from ..auth import MIN_PASSWORD, SESSION_TTL, AuthError, AuthService
 from ..billing import can_use_credit, has_unlimited, products
 from ..cascade import TIER_TITLES, TIERS
@@ -141,7 +142,7 @@ async def login_page(request: Request, error: str | None = None, email: str = ""
     token = await auth_of(request).new_site_token()
     nxt = safe_next(request.query_params.get("next"))
     resp = render(request, "login.html", token=token, links=messenger_links(request, f"login_{token}"), next=nxt,
-                  error=error, email=email)
+                  error=error, email=email, yandex=oauth_yandex.configured(svc(request).settings))
     resp.status_code = status
     return resp
 
@@ -165,11 +166,46 @@ async def login_password(request: Request):
     return set_session(RedirectResponse(safe_next(f.get("next")), status_code=303), request, sid)
 
 
+@router.get("/auth/yandex")
+async def yandex_start(request: Request):
+    st = svc(request).settings
+    if not oauth_yandex.configured(st):
+        return back("/login", "Вход через Яндекс ID пока не подключён")
+    state = secrets.token_urlsafe(24)
+    resp = RedirectResponse(oauth_yandex.authorize_url(st, state), status_code=303)
+    resp.set_cookie("ya_state", f"{state}|{safe_next(request.query_params.get('next'))}", max_age=600, httponly=True,
+                    secure=st.public_base_url.startswith("https://"), samesite="lax")
+    return resp
+
+
+@router.get("/auth/yandex/callback")
+async def yandex_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    st = svc(request).settings
+    saved, _, nxt = (request.cookies.get("ya_state") or "").partition("|")
+    if error or not code:
+        return back("/login", "Вход через Яндекс ID отменён")
+    if not saved or not secrets.compare_digest(saved, state):  # защита от подмены входа (CSRF)
+        return back("/login", "Сессия входа устарела — попробуйте ещё раз")
+    try:
+        profile = await oauth_yandex.fetch_profile(st, code, getattr(request.app.state, "yandex_transport", None))
+    except oauth_yandex.YandexError as e:
+        log.warning("Яндекс ID: %s", e)
+        return back("/login", "Яндекс не подтвердил вход — попробуйте ещё раз")
+    current = await current_user(request)
+    user_id = await auth_of(request).yandex_account(profile.id, profile.email, current.id if current else None,
+                                                    svc(request).merge_users)
+    resp = RedirectResponse(safe_next(nxt), status_code=303)
+    resp.delete_cookie("ya_state")
+    if current is None:
+        set_session(resp, request, await auth_of(request).create_session(user_id))
+    return resp
+
+
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
     if await current_user(request):
         return RedirectResponse("/cabinet", status_code=303)
-    return render(request, "register.html", error=None, email="")
+    return render(request, "register.html", error=None, email="", yandex=oauth_yandex.configured(svc(request).settings))
 
 
 @router.post("/register", response_class=HTMLResponse)
@@ -299,8 +335,9 @@ async def cabinet(request: Request):
     if not user.tg_id and st.telegram_bot_username:
         bind.append(("Telegram", "telegram"))
     return render(request, "cabinet.html", user=user, rows=rows, profile=profile, bind=bind,
+                  yandex=oauth_yandex.configured(st),
                   smtp=mailer.configured(st), min_password=MIN_PASSWORD,
-                  packs=[ps[k] for k in ("pack_10", "pack_25", "pack_50", "unlimited_day")],
+                  packs=[ps[k] for k in ("pack_10", "pack_25", "pack_50")],
                   unlimited=has_unlimited(user), free_left=await s.free_left(user=user),
                   payments=bool(orders_of(request).robokassa or s.settings.dev_fake_payments))
 
@@ -314,7 +351,8 @@ async def cabinet_credentials(request: Request):
     if f.get("password") != f.get("password2"):
         return back("/cabinet#security", "Пароли не совпадают")
     try:
-        updated = await auth_of(request).set_email_password(user.id, f.get("email", ""), f.get("password", ""))
+        updated = await auth_of(request).set_email_password(user.id, f.get("email", ""), f.get("password", ""),
+                                                            keep_session=request.cookies.get(COOKIE))
     except AuthError as e:
         return back("/cabinet#security", str(e))
     if updated.email_verified_at is None:
@@ -525,7 +563,9 @@ async def admin(request: Request):
             "pros": (await db.execute(select(func.count()).select_from(ProProfile)
                                       .where(ProProfile.status == "approved"))).scalar_one(),
         }
-    return render(request, "admin.html", user=user, pending=await pros_of(request).pending(), totals=totals)
+    from ..api.app import payment_warnings
+    return render(request, "admin.html", user=user, pending=await pros_of(request).pending(), totals=totals,
+                  warnings=payment_warnings(s.settings))
 
 
 @router.post("/admin/pros/{profile_id}")

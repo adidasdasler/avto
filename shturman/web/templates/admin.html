@@ -2,6 +2,7 @@
 {% block title %}Модерация — {{ brand }}{% endblock %}
 {% block content %}
 <h1>Модерация</h1>
+{% for w in warnings %}<div class="err" role="alert"><b>Внимание:</b> {{ w }}</div>{% endfor %}
 <div class="grid g4" style="margin:18px 0 26px">
   <div class="card stat"><span class="muted">Пользователей</span><b>{{ totals.users }}</b></div>
   <div class="card stat"><span class="muted">Проверок</span><b>{{ totals.checks }}</b></div>

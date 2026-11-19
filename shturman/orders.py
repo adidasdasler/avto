@@ -12,6 +12,7 @@ import logging
 from datetime import timedelta
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from .billing import apply_payment, products
 from .config import Settings
@@ -63,8 +64,15 @@ class OrderService:
 
     async def mark_paid(self, order_id: int, out_sum: str | float | None = None) -> Order | None:
         """Идемпотентно: повторное уведомление не начислит второй раз."""
+        try:
+            return await self._mark_paid(order_id, out_sum)
+        except IntegrityError:  # параллельное уведомление уже записало эту оплату
+            return await self.get(order_id)
+
+    async def _mark_paid(self, order_id: int, out_sum: str | float | None) -> Order | None:
         async with self.db.session() as s:
-            order = await s.get(Order, order_id)
+            # Блокируем строку заказа: параллельные уведомления ждут, а не начисляют второй раз.
+            order = await s.get(Order, order_id, with_for_update=True)
             if order is None:
                 return None
             if order.status == "paid":

@@ -18,10 +18,14 @@
       <a href="/register">Регистрация</a><a href="/forgot">Забыли пароль?</a>
     </div>
 
-    {% if links %}
+    {% if links or yandex %}
     <div style="display:flex;align-items:center;gap:12px;margin:26px 0 16px;color:var(--muted);font-size:14px">
-      <span style="flex:1;height:1px;background:var(--line)"></span>или через мессенджер<span style="flex:1;height:1px;background:var(--line)"></span>
+      <span style="flex:1;height:1px;background:var(--line)"></span>или<span style="flex:1;height:1px;background:var(--line)"></span>
     </div>
+    {% endif %}
+    {% if yandex %}<a class="btn" href="/auth/yandex?next={{ next|urlencode }}" style="width:100%;background:#000;margin-bottom:10px">Войти с Яндекс ID</a>
+    <p class="hint" style="margin:0 0 10px">Входя через Яндекс ID, вы соглашаетесь с <a href="/privacy">политикой обработки данных</a> и <a href="/offer">офертой</a>.</p>{% endif %}
+    {% if links %}
     <div style="display:grid;gap:10px">
       {% for name, url in links %}<a class="btn ghost" href="{{ url }}" target="_blank" rel="noopener">Войти через {{ name }}</a>{% endfor %}
     </div>

@@ -119,7 +119,7 @@ class MaxBot:
             return
         if payload.startswith("chk_"):
             check = await self.service.find_by_short_id(payload[4:])
-            if check:
+            if check and check.user_id in (None, ctx.user.id):  # чужие проверки не показываем
                 await self.service.attach(check.id, ctx.user.id)
                 await self.show_offer(ctx, check)
                 return
@@ -236,8 +236,8 @@ class MaxBot:
         elif kind == "legal":
             await self.service.update_user(ctx.user.id, legal_status=rest)
             extra = "\nДля ИП и ООО можем выставить счёт и акт — напишите в поддержку." if rest in ("ip", "llc") else ""
-            await self.say(ctx, "Пакеты для подборщиков: отчёты «Досье» дешевле разовых, а безлимит на сутки — "
-                                "для активного дня просмотров." + extra, packs_buttons(self.settings))
+            await self.say(ctx, "Пакеты для подборщиков: отчёты «Досье» дешевле разовых — чем больше пакет, "
+                                "тем ниже цена отчёта." + extra, packs_buttons(self.settings))
             await self.say(ctx, "Присылайте VIN — по одному или списком (каждый с новой строки).")
         elif kind == "credit":
             check = await self.service.find_by_short_id(rest)
@@ -250,7 +250,7 @@ class MaxBot:
             except PermissionError as e:
                 await self.say(ctx, html.escape(str(e)))
                 return
-            await self.send_report(ctx, check)
+            await self.send_report(ctx, check)  # upgrade_with_credit проверил, что проверка своя
         elif kind == "buy":
             code, _, sid = rest.partition(":")
             await self.buy(ctx, code, sid)
@@ -274,6 +274,9 @@ class MaxBot:
             await self.say(ctx, "Неизвестный тариф.")
             return
         check = await self.service.find_by_short_id(sid) if sid and sid != "-" else None
+        if check is not None and check.user_id not in (None, ctx.user.id):
+            await self.say(ctx, "Проверка не найдена.")
+            return
         try:
             order, url = await self.orders.create(ctx.user.id, code, check_id=check.id if check else None,
                                                   platform="max", chat_id=ctx.chat_id or ctx.user_id)

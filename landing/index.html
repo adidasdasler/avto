@@ -494,16 +494,15 @@
     <div class="pro reveal">
       <span class="eyebrow">Автоподборщикам</span>
       <h2>Проверяйте десятки машин в день — без лишних кликов</h2>
-      <p class="lead">Пакеты дешевле разовых отчётов, безлимит на день активных просмотров и проверка списком прямо в {{ messenger }}.</p>
+      <p class="lead">Пакеты дешевле разовых отчётов и проверка списком прямо в {{ messenger }}.</p>
       <div class="pro-grid">
         <div>
           <div class="packs">
             {% for code in ['pack_10', 'pack_25', 'pack_50'] %}{% set p = products[code] %}
             <div class="pack"><b>{{ p.price }} ₽</b><span>{{ p.title }}</span><span class="per">≈ {{ (p.price / p.credits)|round|int }} ₽ за «Досье»</span></div>
             {% endfor %}
-            {% set p = products['unlimited_day'] %}
             <div class="pack"><b>{{ products['dossier'].price }} ₽</b><span>разовое «Досье»</span><span class="per" style="color:var(--on-ink-muted)">для сравнения</span></div>
-            <div class="pack unl"><div><b>{{ p.price }} ₽</b><span>Безлимит «Досье» на 24 часа</span></div><a class="btn btn-amber" href="{{ bot_link or '#top' }}">Подключить</a></div>
+            <div class="pack unl"><div><b>до {{ (100 - products['pack_50'].price / products['pack_50'].credits * 100 / products['dossier'].price)|round|int }}% экономии</b><span>с пакетом на 50 отчётов</span></div><a class="btn btn-amber" href="{{ bot_link or '#top' }}">Купить пакет</a></div>
           </div>
           <div class="term" aria-label="Пример проверки списком в боте">
             &gt; X7TEST00000000001<br>&gt; Т000ТТ00<br>&gt; А123ВС77<br>

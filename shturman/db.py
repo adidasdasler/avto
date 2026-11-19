@@ -33,6 +33,7 @@ class User(Base):
     legal_status: Mapped[str | None] = mapped_column(String(16))  # person | ip | selfemployed | llc
     email: Mapped[str | None] = mapped_column(String(254), unique=True, index=True)
     password_hash: Mapped[str | None] = mapped_column(String(200))
+    yandex_id: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime)
     credits: Mapped[int] = mapped_column(Integer, default=0)  # отчёты уровня «Досье» из пакетов
     unlimited_until: Mapped[datetime | None] = mapped_column(DateTime)

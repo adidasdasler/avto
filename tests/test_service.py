@@ -78,7 +78,9 @@ async def test_unlimited(service, db, settings):
     user = await service.tg_user(43)
     async with db.session() as s:
         u = await s.get(User, user.id)
-        await apply_payment(s, u, products(settings)["unlimited_day"], check_id=None, charge_id="u1")
+        from datetime import timedelta
+        from shturman.db import utcnow
+        u.unlimited_until = utcnow() + timedelta(hours=24)  # безлимит не продаётся, но купленный ранее действует
         await s.commit()
     user = await service.get_user(user.id)
     for _ in range(4):  # лимит бесплатных не действует
