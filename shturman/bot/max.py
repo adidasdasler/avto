@@ -21,7 +21,8 @@ from ..identifiers import Identifier, IdentifierError, parse_many
 from ..orders import OrderService, PaymentsNotConfigured
 from ..services import CheckService, LimitExceeded
 from ..auth import AuthService
-from .common import (BIND_CONFIRM, BIND_DONE, BIND_EXPIRED, HELP, ICONS, LEGAL, LOGIN_CONFIRM, LOGIN_DONE,
+from .. import privacy
+from .common import (DELETE_CONFIRM, DELETED, consent_text, privacy_text, BIND_CONFIRM, BIND_DONE, BIND_EXPIRED, HELP, ICONS, LEGAL, LOGIN_CONFIRM, LOGIN_DONE,
                      LOGIN_EXPIRED, Btn, balance_text, cabinet_message,
                      offer_buttons, packs_buttons, report_file, short, site_name, summary_text, tariffs_text)
 from .max_api import MaxAPI, MaxError
@@ -82,6 +83,8 @@ class MaxBot:
         if kind == "bot_started":
             u = upd.get("user") or {}
             ctx = await self._ctx(u, upd.get("chat_id"))
+            if await self.consent_gate(ctx, start=upd.get("payload") or ""):
+                return
             await self.on_start(ctx, upd.get("payload"))
         elif kind == "message_created":
             msg = upd.get("message") or {}
@@ -90,6 +93,9 @@ class MaxBot:
                 return
             ctx = await self._ctx(u, dig(msg, "recipient", "chat_id"))
             text = (dig(msg, "body", "text") or "").strip()
+            start = text[6:].strip() if text.lower().startswith("/start") else ""
+            if await self.consent_gate(ctx, start=start):
+                return
             await self.on_text(ctx, text)
         elif kind == "message_callback":
             cb = upd.get("callback") or {}
@@ -97,7 +103,55 @@ class MaxBot:
             if cb.get("callback_id"):
                 await self.api.answer_callback(cb["callback_id"])
             ctx = await self._ctx(u, dig(upd, "message", "recipient", "chat_id"))
-            await self.on_callback(ctx, cb.get("payload") or "")
+            data = cb.get("payload") or ""
+            if data.startswith("consent:"):
+                await self.on_consent(ctx, data)
+                return
+            if await self.consent_gate(ctx):
+                return
+            await self.on_callback(ctx, data)
+
+    # ---------------------------------------------------------------- 152-ФЗ
+    async def consent_gate(self, ctx: Ctx, start: str = "") -> bool:
+        """Без согласия на обработку ПДн бот ничего не делает, кроме вопроса о согласии.
+        Ссылку, по которой пришёл человек (вход на сайт, привязка, проверка), выполним после согласия."""
+        if not self.settings.bot_consent_required or privacy.has_pd_consent(ctx.user):
+            return False
+        start = start[:120]
+        await self.say(ctx, consent_text(self.settings),
+                       [[Btn("✅ Принимаю", data=f"consent:yes:{start}")],
+                        [Btn("✅ Принимаю и хочу получать новости", data=f"consent:mkt:{start}")]])
+        return True
+
+    async def on_consent(self, ctx: Ctx, data: str) -> None:
+        _, choice, start = (data.split(":", 2) + ["", ""])[:3]
+        if not privacy.has_pd_consent(ctx.user):
+            for kind in ["offer", "pd"] + (["marketing"] if choice == "mkt" else []):
+                await privacy.record(self.service.db, ctx.user.id, kind, True, source="max")
+            ctx.user = await self.service.get_user(ctx.user.id)
+        await self.on_start(ctx, start)
+
+    async def show_privacy(self, ctx: Ctx) -> None:
+        user = await self.service.get_user(ctx.user.id)
+        mkt = (Btn("🔕 Отписаться от новостей", data="privacy:mkt_off") if user.marketing_consent_at
+               else Btn("🔔 Получать новости и предложения", data="privacy:mkt_on"))
+        await self.say(ctx, privacy_text(user, self.settings),
+                       [[mkt], [Btn("🗑 Удалить мои данные", data="privacy:delete")]])
+
+    async def on_privacy(self, ctx: Ctx, action: str) -> None:
+        if action in ("mkt_on", "mkt_off"):
+            await privacy.record(self.service.db, ctx.user.id, "marketing", action == "mkt_on", source="max")
+            await self.say(ctx, "Подписка включена. Отписаться — /privacy." if action == "mkt_on"
+                           else "Вы отписались от рекламных и информационных сообщений.")
+        elif action == "delete":
+            await self.say(ctx, DELETE_CONFIRM, [[Btn("Да, удалить навсегда", data="privacy:delete_yes")],
+                                                 [Btn("Отмена", data="privacy:cancel")]])
+        elif action == "delete_yes":
+            await privacy.delete_account(self.service.db, ctx.user.id)
+            log.info("Аккаунт №%s удалён из MAX-бота", ctx.user.id)
+            await self.say(ctx, DELETED)
+        elif action == "cancel":
+            await self.say(ctx, "Хорошо, ничего не удаляем.")
 
     async def _ctx(self, u: dict[str, Any], chat_id: int | None) -> Ctx:
         uid = int(u["user_id"])
@@ -144,6 +198,8 @@ class MaxBot:
             await self.on_start(ctx, text[6:].strip())
         elif cmd == "/help":
             await self.say(ctx, HELP)
+        elif cmd == "/privacy":
+            await self.show_privacy(ctx)
         elif cmd == "/id":  # для ALERT_MAX_USER_IDS — куда слать тревоги сотрудникам
             await self.say(ctx, f"Ваш ID в MAX: <code>{ctx.user_id}</code>")
         elif cmd == "/tariffs":
@@ -236,6 +292,9 @@ class MaxBot:
 
     async def on_callback(self, ctx: Ctx, data: str) -> None:
         kind, _, rest = data.partition(":")
+        if kind == "privacy":
+            await self.on_privacy(ctx, rest)
+            return
         if kind == "role":
             await self.service.update_user(ctx.user.id, role=rest)
             if rest == "picker":

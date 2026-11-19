@@ -61,7 +61,8 @@ class CheckService:
             target, source = await s.get(User, target_id), await s.get(User, source_id)
             if target is None or source is None:
                 return
-            for model in (Check, Order, Payment, WebSession, LoginToken):
+            from .db import ConsentLog
+            for model in (Check, Order, Payment, WebSession, LoginToken, ConsentLog):
                 await s.execute(update(model).where(model.user_id == source_id).values(user_id=target_id))
             src_profile = (await s.execute(select(ProProfile).where(ProProfile.user_id == source_id))).scalar_one_or_none()
             if src_profile is not None:
@@ -77,7 +78,8 @@ class CheckService:
             if source.role == "picker":
                 target.role = "picker"
             moved = {}
-            for attr in ("max_id", "tg_id", "email", "password_hash", "email_verified_at", "username", "legal_status"):
+            for attr in ("max_id", "tg_id", "email", "password_hash", "email_verified_at", "username", "legal_status",
+                         "pd_consent_at", "pd_consent_version", "marketing_consent_at"):
                 if getattr(target, attr) is None and getattr(source, attr) is not None:
                     moved[attr] = getattr(source, attr)
                     setattr(source, attr, None)

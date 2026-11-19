@@ -116,6 +116,40 @@
   </div>
 </div>
 
+<div class="card" id="privacy" style="margin-bottom:24px">
+  <h2>Мои данные и согласия</h2>
+  <div class="grid g2" style="align-items:start">
+    <div>
+      <p style="margin-top:0">Согласие на обработку персональных данных: <b>дано {{ user.pd_consent_at.strftime('%d.%m.%Y') if user.pd_consent_at else '—' }}</b> · <a href="/consent" target="_blank">текст согласия</a> · <a href="/privacy" target="_blank">политика</a></p>
+      <form method="post" action="/cabinet/marketing" style="margin:0 0 12px">
+        {% if user.marketing_consent_at %}
+        <p style="margin:0 0 6px">Новости и специальные предложения: <span class="pill green">подписаны</span> с {{ user.marketing_consent_at.strftime('%d.%m.%Y') }}</p>
+        <input type="hidden" name="on" value="0"><button class="btn sm ghost">Отписаться</button>
+        {% else %}
+        <p style="margin:0 0 6px">Новости и специальные предложения: <span class="pill grey">не подписаны</span></p>
+        <input type="hidden" name="on" value="1"><button class="btn sm ghost">Получать новости и предложения</button>
+        <div class="hint">Нажимая, вы даёте <a href="/consent-marketing" target="_blank">согласие на получение рекламы</a>. Отписаться можно в любой момент.</div>
+        {% endif %}
+      </form>
+      <a class="btn sm ghost" href="/cabinet/export.json">Скачать мои данные (JSON)</a>
+      {% if consents %}<details style="margin-top:12px"><summary style="cursor:pointer" class="muted">История согласий</summary>
+        <table style="font-size:14px;margin-top:6px">{% for c in consents %}<tr><td>{{ c.created_at.strftime('%d.%m.%Y %H:%M') }}</td><td>{{ consent_titles.get(c.kind, c.kind) }}</td><td>{{ 'дано' if c.granted else 'отозвано' }}</td></tr>{% endfor %}</table></details>{% endif %}
+    </div>
+    <details>
+      <summary style="cursor:pointer;font-weight:600;color:var(--red)">Удалить аккаунт</summary>
+      <form method="post" action="/cabinet/delete" onsubmit="return confirm('Удалить аккаунт безвозвратно?')">
+        <p class="hint">Почта, пароль, привязки Яндекс ID и мессенджеров, анкета специалиста и история проверок будут удалены сразу и безвозвратно — это также отзыв согласия на обработку данных.
+          {% if user.credits %}<b>Неиспользованные отчёты в пакете ({{ user.credits }}) сгорят</b> — если хотите вернуть деньги, сначала напишите в поддержку.{% endif %}
+          Записи об оплатах без ваших контактов хранятся 5 лет — этого требует закон о бухгалтерском учёте.</p>
+        {% if user.password_hash %}<label for="d-password">Пароль</label><input id="d-password" type="password" name="password" autocomplete="current-password" required>{% endif %}
+        <label for="d-confirm">Введите слово УДАЛИТЬ</label>
+        <input id="d-confirm" type="text" name="confirm" required autocomplete="off">
+        <button class="btn" style="margin-top:12px;background:var(--red)">Удалить аккаунт</button>
+      </form>
+    </details>
+  </div>
+</div>
+
 <div class="card" style="background:var(--ink);color:var(--on-ink);border-color:transparent">
   <h2>Вы подборщик, диагност или продаёте авто?</h2>
   <p style="color:var(--on-ink-muted);margin-top:0">Разместите анкету в каталоге специалистов — покупатели, которые проверяют машины у нас, найдут вас по городу.</p>

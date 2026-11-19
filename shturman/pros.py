@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import delete as sa_delete, case, func, select
 
 from .db import Database, ProProfile, ProStat, utcnow
 
@@ -166,6 +166,18 @@ class ProService:
             if p and p.status in ("approved", "hidden"):
                 p.status = "hidden" if hidden else "approved"
                 await s.commit()
+
+    async def delete(self, user_id: int) -> bool:
+        """Удалить анкету вместе со статистикой (отзыв согласия на распространение данных)."""
+        from .db import ProStat
+        async with self.db.session() as s:
+            p = (await s.execute(select(ProProfile).where(ProProfile.user_id == user_id))).scalar_one_or_none()
+            if p is None:
+                return False
+            await s.execute(sa_delete(ProStat).where(ProStat.profile_id == p.id))
+            await s.delete(p)
+            await s.commit()
+            return True
 
     async def moderate(self, profile_id: int, approve: bool, reason: str | None = None) -> ProProfile | None:
         async with self.db.session() as s:

@@ -14,14 +14,11 @@
       <div class="hint">Не короче 8 символов.</div>
       <label for="password2">Пароль ещё раз</label>
       <input id="password2" type="password" name="password2" autocomplete="new-password" minlength="8" required>
-      <label style="display:flex;gap:10px;align-items:flex-start;font-weight:400;margin-top:18px">
-        <input type="checkbox" name="consent" required style="margin-top:4px">
-        <span>Согласен на обработку персональных данных в соответствии с <a href="/privacy" target="_blank">политикой</a> и принимаю условия <a href="/offer" target="_blank">оферты</a>.</span>
-      </label>
+      {% include "_consents.html" %}
       <button class="btn amber" style="width:100%;margin-top:18px">Зарегистрироваться</button>
     </form>
     {% if yandex %}<a class="btn" href="/auth/yandex" style="width:100%;background:#000;margin-top:12px">Зарегистрироваться с Яндекс ID</a>
-    <p class="hint" style="margin:0 0 10px">Входя через Яндекс ID, вы соглашаетесь с <a href="/privacy">политикой обработки данных</a> и <a href="/offer">офертой</a>.</p>{% endif %}
+    <p class="hint" style="margin:0 0 10px">После входа через Яндекс ID попросим отдельно подтвердить согласие на обработку данных.</p>{% endif %}
     <p style="margin-top:14px;font-size:15px">Уже есть аккаунт? <a href="/login">Войти</a></p>
   </div>
 </div>

@@ -8,7 +8,8 @@ from tests.test_cabinet import login_as, make_client
 
 
 def register(client, email="ivan@example.com", password="secret-123", **extra):
-    data = {"email": email, "password": password, "password2": password, "consent": "on", **extra}
+    data = {"email": email, "password": password, "password2": password, "offer": "on", "consent": "on",
+            **extra}
     return client.post("/register", data=data)
 
 
@@ -31,8 +32,10 @@ def test_register_login_logout(settings):
 def test_register_validation(settings):
     with make_client(settings) as client:
         assert "не совпадают" in register(client, password2="other-123").text
+        assert "условия оферты" in client.post("/register", data={"email": "a@b.ru", "password": "secret-123",
+                                                                   "password2": "secret-123"}).text
         assert "Нужно согласие" in client.post("/register", data={"email": "a@b.ru", "password": "secret-123",
-                                                                    "password2": "secret-123"}).text
+                                                                    "password2": "secret-123", "offer": "on"}).text
         assert "не короче 8" in register(client, password="short").text
         assert "Проверьте адрес" in register(client, email="not-an-email").text
         register(client)

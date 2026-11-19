@@ -108,6 +108,9 @@ class Settings(BaseSettings):
     alert_repeat_hours: float = 3  # повторять ту же тревогу не чаще
     balance_probe_minutes: int = 30  # узнавать баланс бесплатным тестовым запросом
 
+    # 152-ФЗ: бот спрашивает согласие на обработку ПДн до начала работы (выключается только в тестах)
+    bot_consent_required: bool = True
+
     # Панель администратора: секретный адрес и сотрудники только из .env (см. shturman/admin/accounts.py)
     admin_path: str = ""  # например /ops-k7f2x9q4m1; пусто — панель выключена
     admin_users: str = ""  # создаётся командой: python -m shturman.admin.cli add <логин>

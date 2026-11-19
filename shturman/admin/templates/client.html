@@ -2,7 +2,7 @@
 {% block title %}Клиент №{{ user.id }}{% endblock %}
 {% block content %}
 <a href="{{ A }}/clients" class="hint">← Клиенты</a>
-<h1 style="margin-top:6px">Клиент №{{ user.id }} {% if user.blocked_at %}<span class="pill red">заблокирован</span>{% endif %}</h1>
+<h1 style="margin-top:6px">Клиент №{{ user.id }} {% if user.deleted_at %}<span class="pill grey">аккаунт удалён {{ user.deleted_at|dt }}</span>{% elif user.blocked_at %}<span class="pill red">заблокирован</span>{% endif %}</h1>
 
 <div class="grid g3" style="margin-bottom:14px">
   <div class="card">
@@ -15,6 +15,8 @@
       <tr><td class="muted">Тип</td><td>{{ 'подборщик' if user.role == 'picker' else 'покупатель' }}{% if user.legal_status %} · {{ user.legal_status }}{% endif %}</td></tr>
       <tr><td class="muted">Регистрация</td><td>{{ user.created_at|dt }}</td></tr>
       <tr><td class="muted">Активных сессий</td><td>{{ sessions }}</td></tr>
+      <tr><td class="muted">Согласие на ПДн</td><td>{{ user.pd_consent_at|dt if user.pd_consent_at else '—' }}</td></tr>
+      <tr><td class="muted">Реклама</td><td>{{ ('да, с ' ~ (user.marketing_consent_at|dt)) if user.marketing_consent_at else 'нет согласия' }}</td></tr>
       {% if user.blocked_at %}<tr><td class="muted">Блокировка</td><td>{{ user.blocked_at|dt }}: {{ user.blocked_reason or '—' }}</td></tr>{% endif %}
     </table>
   </div>
@@ -39,6 +41,15 @@
       {% if not user.blocked_at %}<input type="text" name="reason" placeholder="Причина блокировки" required>{% endif %}
       <button class="btn {{ '' if user.blocked_at else 'danger' }}">{{ 'Разблокировать' if user.blocked_at else 'Заблокировать' }}</button>
     </form>
+    {% if staff.is_admin and not user.deleted_at %}
+    <details style="margin-top:14px"><summary class="hint" style="cursor:pointer">Удалить данные по запросу клиента</summary>
+      <form method="post" action="{{ A }}/clients/{{ user.id }}/delete" style="display:grid;gap:8px;margin-top:8px" onsubmit="return confirm('Удалить персональные данные клиента безвозвратно?')">
+        <input type="text" name="reason" placeholder="Основание: письмо от … на почту" required>
+        <input type="text" name="confirm" placeholder="Введите слово УДАЛИТЬ" required autocomplete="off">
+        <button class="btn danger">Удалить персональные данные</button>
+      </form>
+      <p class="hint">Как при удалении самим клиентом: почта, привязки, анкета и проверки без оплат — удаляются, оплаты обезличиваются. Срок по закону — не позднее 30 дней с запроса.</p>
+    </details>{% endif %}
     {% if profile %}<p style="margin-top:14px">Анкета: {% if profile.status == 'approved' %}<a href="/pros/{{ profile.slug }}" target="_blank">{{ profile.name }}</a>{% else %}<a href="{{ A }}/pros?status={{ profile.status }}">{{ profile.name }}</a>{% endif %} · {{ profile.status }}</p>{% endif %}
   </div>
 </div>

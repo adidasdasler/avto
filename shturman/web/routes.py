@@ -15,6 +15,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import func, select
 
 from .. import mailer, oauth_yandex
+from .. import privacy as pdn
 from ..auth import MIN_PASSWORD, SESSION_TTL, AuthError, AuthService
 from ..billing import can_use_credit, has_unlimited, products
 from ..cascade import TIER_TITLES, TIERS
@@ -52,11 +53,27 @@ async def current_user(request: Request) -> User | None:
     return await auth_of(request).session_user(request.cookies.get(COOKIE))
 
 
-async def require_user(request: Request) -> User:
+async def require_user(request: Request, consent: bool = True) -> User:
+    """Вошедший пользователь. Без действующего согласия на обработку ПДн (новый вход через Яндекс или бота,
+    новая редакция документа) — сначала страница согласия."""
     user = await current_user(request)
     if user is None:
         raise HTTPException(status_code=303, headers={"Location": "/login?next=" + quote(request.url.path)})
+    if consent and not pdn.has_pd_consent(user):
+        raise HTTPException(status_code=303, headers={"Location": "/cabinet/consent?next=" + quote(request.url.path)})
     return user
+
+
+def ip_of(request: Request) -> str | None:
+    if svc(request).settings.trust_proxy_headers and request.headers.get("x-forwarded-for"):
+        return request.headers["x-forwarded-for"].split(",")[0].strip()
+    return request.client.host if request.client else None
+
+
+async def give_consents(request: Request, user_id: int, kinds: list[str], source: str = "web") -> None:
+    for kind in kinds:
+        await pdn.record(svc(request).db, user_id, kind, True, source=source, ip=ip_of(request),
+                             user_agent=request.headers.get("user-agent"))
 
 
 async def form_data(request: Request) -> dict[str, str]:
@@ -72,7 +89,8 @@ def render(request: Request, name: str, user: User | None = None, **ctx: Any) ->
     s = svc(request).settings
     html = _env.get_template(name).render(brand=s.brand_name, user=user,
                                           msg=request.query_params.get("msg"), kinds=KINDS,
-                                          kind_groups=KIND_GROUPS, sensitive_kinds=SENSITIVE_KINDS, **ctx)
+                                          kind_groups=KIND_GROUPS, sensitive_kinds=SENSITIVE_KINDS,
+                                          consent_titles=pdn.KIND_TITLES, **ctx)
     return HTMLResponse(html)
 
 
@@ -223,12 +241,15 @@ async def register(request: Request):
         return fail("Слишком много попыток. Подождите 15 минут.", 429)
     if f.get("password") != f.get("password2"):
         return fail("Пароли не совпадают.")
+    if f.get("offer") != "on":
+        return fail("Нужно принять условия оферты.")
     if f.get("consent") != "on":
         return fail("Нужно согласие на обработку персональных данных.")
     try:
         user = await auth_of(request).register(email, f.get("password", ""))
     except AuthError as e:
         return fail(str(e))
+    await give_consents(request, user.id, ["offer", "pd"] + (["marketing"] if f.get("marketing") == "on" else []))
     sent = await send_verify_email(request, user)
     sid = await auth_of(request).create_session(user.id)
     msg = ("Готово! Мы отправили письмо для подтверждения адреса." if sent else "Готово! Добро пожаловать.")
@@ -336,6 +357,7 @@ async def cabinet(request: Request):
     if not user.tg_id and st.telegram_bot_username:
         bind.append(("Telegram", "telegram"))
     return render(request, "cabinet.html", user=user, rows=rows, profile=profile, bind=bind,
+                  consents=await pdn.history(s.db, user.id),
                   yandex=oauth_yandex.configured(st),
                   smtp=mailer.configured(st), min_password=MIN_PASSWORD,
                   packs=[ps[k] for k in ("pack_10", "pack_25", "pack_50")],
@@ -453,6 +475,7 @@ async def pro_save(request: Request):
                    experience_years=f.get("experience_years", ""), consent=f.get("consent") == "on")
     try:
         await pros_of(request).save(user.id, form)
+        await give_consents(request, user.id, ["public"])
     except ValidationError as e:
         profile = await pros_of(request).by_user(user.id)
         return render(request, "pro_edit.html", user=user, p=profile, stats=None, form=form, error=str(e))
@@ -465,6 +488,80 @@ async def pro_visibility(request: Request):
     f = await form_data(request)
     await pros_of(request).set_hidden(user.id, f.get("hidden") == "1")
     return back("/cabinet/pro")
+
+
+@router.post("/cabinet/pro/delete")
+async def pro_delete(request: Request):
+    user = await require_user(request)
+    await form_data(request)
+    if await pros_of(request).delete(user.id):
+        await pdn.record(svc(request).db, user.id, "public", False, source="web", ip=ip_of(request),
+                             user_agent=request.headers.get("user-agent"))
+    return back("/cabinet", "Анкета удалена из каталога")
+
+
+# ---------------------------------------------------------------- 152-ФЗ: согласия, мои данные, удаление
+@router.get("/cabinet/consent", response_class=HTMLResponse)
+async def consent_page(request: Request):
+    user = await require_user(request, consent=False)
+    nxt = safe_next(request.query_params.get("next"))
+    if pdn.has_pd_consent(user):
+        return RedirectResponse(nxt, status_code=303)
+    return render(request, "consent.html", user=user, next=nxt, error=None, renewal=user.pd_consent_at is not None
+                  or bool(user.pd_consent_version))
+
+
+@router.post("/cabinet/consent", response_class=HTMLResponse)
+async def consent_save(request: Request):
+    user = await require_user(request, consent=False)
+    f = await form_data(request)
+    nxt = safe_next(f.get("next"))
+    if f.get("consent") != "on":
+        r = render(request, "consent.html", user=user, next=nxt, renewal=False,
+                   error="Без согласия на обработку персональных данных кабинет недоступен. Можно выйти "
+                         "или удалить аккаунт ниже.")
+        r.status_code = 400
+        return r
+    await give_consents(request, user.id, ["pd"] + (["marketing"] if f.get("marketing") == "on" else []))
+    return RedirectResponse(nxt, status_code=303)
+
+
+@router.post("/cabinet/marketing")
+async def cabinet_marketing(request: Request):
+    user = await require_user(request)
+    f = await form_data(request)
+    on = f.get("on") == "1"
+    await pdn.record(svc(request).db, user.id, "marketing", on, source="web", ip=ip_of(request),
+                         user_agent=request.headers.get("user-agent"))
+    return back("/cabinet#privacy", "Подписка на новости и предложения включена" if on else
+                "Вы отписались от рекламных и информационных сообщений")
+
+
+@router.get("/cabinet/export.json")
+async def cabinet_export(request: Request):
+    user = await require_user(request, consent=False)
+    import json
+    data = await pdn.export(svc(request).db, user.id)
+    return Response(json.dumps(data, ensure_ascii=False, indent=2), media_type="application/json; charset=utf-8",
+                    headers={"Content-Disposition": f"attachment; filename=vincv-my-data-{user.id}.json",
+                             "Cache-Control": "no-store"})
+
+
+@router.post("/cabinet/delete")
+async def cabinet_delete(request: Request):
+    """Удаление аккаунта и отзыв согласия (ст. 9 и 21 152-ФЗ). Доступно и без действующего согласия."""
+    user = await require_user(request, consent=False)
+    f = await form_data(request)
+    home = "/cabinet/consent" if f.get("from") == "consent" else "/cabinet#privacy"
+    if f.get("confirm", "").strip().upper() != "УДАЛИТЬ":
+        return back(home, "Для удаления введите слово УДАЛИТЬ")
+    if user.password_hash and not await auth_of(request).check_password(user.email or "", f.get("password", "")):
+        return back(home, "Пароль указан неверно")
+    await pdn.delete_account(svc(request).db, user.id)
+    log.info("Аккаунт №%s удалён пользователем", user.id)
+    resp = back("/", "Аккаунт удалён. Персональные данные стёрты.")
+    resp.delete_cookie(COOKIE)
+    return resp
 
 
 # ---------------------------------------------------------------- каталог
@@ -502,6 +599,9 @@ async def pro_contacts(request: Request, slug: str):
 
 # ---------------------------------------------------------------- документы
 LEGAL_PAGES = {"offer": "Публичная оферта", "privacy": "Политика обработки персональных данных",
+               "consent": "Согласие на обработку персональных данных",
+               "consent-marketing": "Согласие на получение рекламных и информационных сообщений",
+               "consent-public": "Согласие на распространение персональных данных (анкета специалиста)",
                "contacts": "Контакты и реквизиты"}
 LEGAL_UPDATED = "19.11.2026"
 
@@ -525,6 +625,21 @@ async def privacy(request: Request):
     return await legal_page(request, "privacy")
 
 
+@router.get("/consent", response_class=HTMLResponse)
+async def consent_doc(request: Request):
+    return await legal_page(request, "consent")
+
+
+@router.get("/consent-marketing", response_class=HTMLResponse)
+async def consent_marketing_doc(request: Request):
+    return await legal_page(request, "consent-marketing")
+
+
+@router.get("/consent-public", response_class=HTMLResponse)
+async def consent_public_doc(request: Request):
+    return await legal_page(request, "consent-public")
+
+
 @router.get("/contacts", response_class=HTMLResponse)
 async def contacts(request: Request):
     return await legal_page(request, "contacts")
@@ -539,7 +654,7 @@ async def robots(request: Request) -> str:
 
 @router.get("/sitemap.xml")
 async def sitemap(request: Request) -> Response:
-    paths = ["/", "/pros", "/offer", "/privacy", "/contacts"]
+    paths = ["/", "/pros", "/offer", "/privacy", "/consent", "/contacts"]
     paths += [f"/pros/{p.slug}" for p in await pros_of(request).catalog()]
     urls = "".join(f"<url><loc>{site_url(request, p)}</loc></url>" for p in paths)
     xml = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>'

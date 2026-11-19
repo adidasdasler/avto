@@ -160,6 +160,12 @@ def test_yandex_login_creates_and_reuses_account(settings):
     with _ya_client(settings) as client:
         cb = _ya_login(client)
         assert cb.status_code == 303 and cb.headers["location"] == "/cabinet"
+        # новый пользователь через Яндекс — сначала отдельное согласие на обработку ПДн
+        r = client.get("/cabinet")
+        assert r.status_code == 303 and r.headers["location"].startswith("/cabinet/consent")
+        assert "Нужно согласие" not in client.get("/cabinet/consent").text
+        assert client.post("/cabinet/consent", data={"next": "/cabinet"}).status_code == 400
+        assert client.post("/cabinet/consent", data={"consent": "on", "next": "/cabinet"}).headers["location"] == "/cabinet"
         page = client.get("/cabinet").text
         assert "ivan@yandex.ru" in page and "подтверждена" in page and "Яндекс ID привязан" in page
         client.cookies.clear()
@@ -180,6 +186,7 @@ def test_yandex_does_not_take_over_unverified_email(settings):
         register(client, email="victim@yandex.ru")  # злоумышленник занял чужой адрес без подтверждения
         client.cookies.clear()
         _ya_login(client, email="victim@yandex.ru")
+        client.post("/cabinet/consent", data={"consent": "on"})
         page = client.get("/cabinet").text
         assert "Номер в системе: 2" in page and "victim@yandex.ru" in page  # владелец получил свой аккаунт
         client.cookies.clear()

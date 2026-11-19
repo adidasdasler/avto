@@ -1,0 +1,16 @@
+{# Отдельные галочки: оферта, обработка ПДн (обязательные) и реклама (необязательная). Не отмечены заранее. #}
+<div style="display:grid;gap:10px;margin-top:18px">
+  {% if with_offer is not defined or with_offer %}
+  <label style="display:flex;gap:10px;align-items:flex-start;font-weight:400;margin:0">
+    <input type="checkbox" name="offer" required style="margin-top:4px">
+    <span>Принимаю условия <a href="/offer" target="_blank">публичной оферты</a>.</span>
+  </label>{% endif %}
+  <label style="display:flex;gap:10px;align-items:flex-start;font-weight:400;margin:0">
+    <input type="checkbox" name="consent" required style="margin-top:4px">
+    <span>Даю <a href="/consent" target="_blank">согласие на обработку персональных данных</a> в соответствии с <a href="/privacy" target="_blank">политикой</a>.</span>
+  </label>
+  <label style="display:flex;gap:10px;align-items:flex-start;font-weight:400;margin:0">
+    <input type="checkbox" name="marketing" style="margin-top:4px">
+    <span>Хочу получать новости и специальные предложения — <a href="/consent-marketing" target="_blank">согласие на получение рекламы</a> (необязательно).</span>
+  </label>
+</div>

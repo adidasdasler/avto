@@ -20,7 +20,8 @@ from aiogram.types import (BotCommand, BufferedInputFile, CallbackQuery, InlineK
 
 from ..billing import Product, apply_payment, can_use_credit, has_unlimited, products
 from ..auth import AuthService
-from .common import (BIND_CONFIRM, BIND_DONE, BIND_EXPIRED, HELP, ICONS, LEGAL, LOGIN_CONFIRM, LOGIN_DONE,
+from .. import privacy
+from .common import (DELETE_CONFIRM, DELETED, consent_text, privacy_text, BIND_CONFIRM, BIND_DONE, BIND_EXPIRED, HELP, ICONS, LEGAL, LOGIN_CONFIRM, LOGIN_DONE,
                      LOGIN_EXPIRED, Btn, balance_text, cabinet_message,
                      offer_buttons, packs_buttons, report_file, short, site_name, summary_text, tariffs_text)
 from ..cascade import TIER_TITLES
@@ -140,6 +141,46 @@ async def cmd_cabinet(message: Message, service: CheckService, settings: Setting
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     await message.answer(HELP)
+
+
+# ---------------------------------------------------------------- 152-ФЗ
+@router.callback_query(F.data.startswith("consent:"))
+async def cb_consent(cq: CallbackQuery, service: CheckService) -> None:
+    user = await service.tg_user(cq.from_user.id)
+    if not privacy.has_pd_consent(user):
+        for kind in ["offer", "pd"] + (["marketing"] if cq.data == "consent:mkt" else []):
+            await privacy.record(service.db, user.id, kind, True, source="telegram")
+    await cq.answer()
+    await cq.message.answer("Спасибо! " + HELP + "\n\nЕсли вы пришли по ссылке с сайта — откройте её ещё раз.")
+
+
+@router.message(Command("privacy"))
+async def cmd_privacy(message: Message, service: CheckService, settings: Settings) -> None:
+    user = await service.tg_user(message.from_user.id)
+    mkt = (Btn("🔕 Отписаться от новостей", data="privacy:mkt_off") if user.marketing_consent_at
+           else Btn("🔔 Получать новости и предложения", data="privacy:mkt_on"))
+    await message.answer(privacy_text(user, settings),
+                         reply_markup=_kb([[mkt], [Btn("🗑 Удалить мои данные", data="privacy:delete")]]))
+
+
+@router.callback_query(F.data.startswith("privacy:"))
+async def cb_privacy(cq: CallbackQuery, service: CheckService) -> None:
+    user = await service.tg_user(cq.from_user.id)
+    action = cq.data.split(":", 1)[1]
+    await cq.answer()
+    if action in ("mkt_on", "mkt_off"):
+        await privacy.record(service.db, user.id, "marketing", action == "mkt_on", source="telegram")
+        await cq.message.answer("Подписка включена. Отписаться — /privacy." if action == "mkt_on"
+                                else "Вы отписались от рекламных и информационных сообщений.")
+    elif action == "delete":
+        await cq.message.answer(DELETE_CONFIRM, reply_markup=_kb([[Btn("Да, удалить навсегда",
+                                                                        data="privacy:delete_yes")],
+                                                                   [Btn("Отмена", data="privacy:cancel")]]))
+    elif action == "delete_yes":
+        await privacy.delete_account(service.db, user.id)
+        await cq.message.answer(DELETED)
+    else:
+        await cq.message.answer("Хорошо, ничего не удаляем.")
 
 
 @router.message(Command("tariffs"))
@@ -345,6 +386,16 @@ async def block_middleware(handler, event, data):
             else:
                 await event.answer(text)
             return None
+        settings: Settings = data["settings"]
+        is_consent = isinstance(event, CallbackQuery) and (event.data or "").startswith("consent:")
+        if settings.bot_consent_required and not privacy.has_pd_consent(user) and not is_consent:
+            target = event.message if isinstance(event, CallbackQuery) else event
+            if isinstance(event, CallbackQuery):
+                await event.answer()
+            await target.answer(consent_text(settings), reply_markup=_kb([
+                [Btn("✅ Принимаю", data="consent:yes")],
+                [Btn("✅ Принимаю и хочу получать новости", data="consent:mkt")]]))
+            return None
     return await handler(event, data)
 
 
@@ -369,5 +420,6 @@ async def run_polling(service: CheckService, settings: Settings) -> None:
         BotCommand(command="history", description="История проверок"),
         BotCommand(command="cabinet", description="Личный кабинет на сайте"),
         BotCommand(command="tariffs", description="Тарифы"),
+        BotCommand(command="privacy", description="Мои данные и удаление"),
         BotCommand(command="help", description="Помощь")])
     await dp.start_polling(bot)

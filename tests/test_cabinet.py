@@ -26,9 +26,12 @@ def login_as(client, max_id=100):
     app = client.app
 
     async def confirm():
+        from shturman import privacy
         user = await app.state.service.max_user(max_id)
+        if not privacy.has_pd_consent(user):  # в боте согласие дают до входа на сайт
+            await privacy.record(app.state.service.db, user.id, "pd", True, source="max")
         assert await app.state.auth.bind_site_token(token, user.id)
-        return user
+        return await app.state.service.get_user(user.id)
     user = client.portal.call(confirm)
     assert client.get(f"/auth/poll?t={token}").json() == {"ok": True}
     assert client.get(f"/auth/poll?t={token}").json() == {"ok": False}  # одноразовый

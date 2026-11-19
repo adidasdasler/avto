@@ -323,6 +323,19 @@ async def client_block(request: Request, user_id: int):
     return go(request, f"/clients/{user_id}", "Заблокирован" if block else "Разблокирован")
 
 
+@router.post("/clients/{user_id}/delete")
+async def client_delete(request: Request, user_id: int):
+    staff = await require_staff(request, admin=True)
+    f = await form_data(request)
+    reason = (f.get("reason") or "").strip()
+    if f.get("confirm", "").strip().upper() != "УДАЛИТЬ" or not reason:
+        return go(request, f"/clients/{user_id}", "Укажите основание и введите слово УДАЛИТЬ")
+    from .. import privacy
+    out = await privacy.delete_account(svc(request).db, user_id)
+    await log_action(request, staff, "pd_delete", f"user:{user_id}", reason=reason, **out)
+    return go(request, f"/clients/{user_id}", "Персональные данные удалены")
+
+
 # ---------------------------------------------------------------- заказы
 @router.get("/orders", response_class=HTMLResponse)
 async def orders_page(request: Request, status: str = ""):

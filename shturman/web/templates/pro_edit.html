@@ -44,7 +44,7 @@
     </div>
     <label style="display:flex;gap:10px;align-items:flex-start;font-weight:400;margin-top:20px">
       <input type="checkbox" name="consent" {{ 'checked' if (form and form.consent) or (p and not form) }} style="margin-top:4px">
-      <span>Согласен на публикацию анкеты и контактов в открытом каталоге {{ brand }}.</span>
+      <span>Даю <a href="/consent-public" target="_blank">согласие на распространение персональных данных</a> — публикацию анкеты и контактов в открытом каталоге {{ brand }}. Отозвать можно, скрыв или удалив анкету.</span>
     </label>
     <button class="btn amber" style="margin-top:20px">{{ 'Сохранить и отправить на модерацию' if p else 'Отправить на модерацию' }}</button>
   </form>
@@ -53,6 +53,11 @@
   <form method="post" action="/cabinet/pro/visibility" style="margin-top:14px">
     <input type="hidden" name="hidden" value="{{ '0' if p.status == 'hidden' else '1' }}">
     <button class="btn ghost">{{ 'Показать анкету в каталоге' if p.status == 'hidden' else 'Скрыть анкету из каталога' }}</button>
+  </form>
+  {% endif %}
+  {% if p %}
+  <form method="post" action="/cabinet/pro/delete" style="margin-top:10px" onsubmit="return confirm('Удалить анкету и её статистику безвозвратно?')">
+    <button class="btn sm ghost" style="color:var(--red)">Удалить анкету</button>
   </form>
   {% endif %}
 </div>

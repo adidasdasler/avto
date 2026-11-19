@@ -45,7 +45,26 @@ class User(Base):
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime)
     credits: Mapped[int] = mapped_column(Integer, default=0)  # отчёты уровня «Досье» из пакетов
     unlimited_until: Mapped[datetime | None] = mapped_column(DateTime)
+    # 152-ФЗ: действующие согласия (журнал всех выдач и отзывов — ConsentLog)
+    pd_consent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    pd_consent_version: Mapped[str | None] = mapped_column(String(16))
+    marketing_consent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime)  # аккаунт удалён, данные обезличены
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ConsentLog(Base):
+    """Журнал согласий: кто, на что, какую редакцию документа, когда, откуда — для подтверждения согласия."""
+    __tablename__ = "consent_log"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    kind: Mapped[str] = mapped_column(String(16))  # pd | marketing | public | offer
+    granted: Mapped[bool] = mapped_column()
+    version: Mapped[str] = mapped_column(String(16))
+    source: Mapped[str] = mapped_column(String(16))  # web | max | telegram | yandex
+    ip: Mapped[str | None] = mapped_column(String(64))
+    user_agent: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class Check(Base):

@@ -9,7 +9,8 @@ from shturman.services import CheckService
 @pytest.fixture
 def settings(tmp_path):
     return Settings(_env_file=None, database_url=f"sqlite+aiosqlite:///{tmp_path}/t.db",
-                    telegram_bot_username="test_bot", free_checks_per_day=2)
+                    telegram_bot_username="test_bot", free_checks_per_day=2,
+                    bot_consent_required=False)  # отдельные тесты согласия — в test_privacy.py
 
 
 @pytest.fixture
