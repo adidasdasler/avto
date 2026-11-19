@@ -19,6 +19,7 @@ KINDS = {
     "selector": "Автоподборщик",
     "inspector": "Выездная диагностика",
     "dealer": "Продажа авто (перекуп)",
+    "unlock": "Аварийное вскрытие авто",
 }
 
 _TRANSLIT = str.maketrans({

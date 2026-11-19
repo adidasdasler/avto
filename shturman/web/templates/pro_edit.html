@@ -19,9 +19,10 @@
 
   <form method="post" action="/cabinet/pro" class="card">
     <label for="kind">Чем вы занимаетесь</label>
-    <select id="kind" name="kind" required>
+    <select id="kind" name="kind" required onchange="document.getElementById('unlock-hint').hidden = this.value !== 'unlock'">
       {% for k, t in kinds.items() %}<option value="{{ k }}" {{ 'selected' if v and v.kind == k }}>{{ t }}</option>{% endfor %}
     </select>
+    <div id="unlock-hint" class="hint" {{ '' if v and v.kind == 'unlock' else 'hidden' }}>Для вскрытия укажите в описании, что открываете машину только владельцу при документах (СТС или ПТС и паспорт) — без этого анкету не опубликуем.</div>
     <div class="grid g2">
       <div><label for="name">Имя или название</label><input id="name" type="text" name="name" maxlength="80" required value="{{ v.name if v else '' }}"></div>
       <div><label for="city">Город</label><input id="city" type="text" name="city" maxlength="60" required value="{{ v.city if v else '' }}"></div>

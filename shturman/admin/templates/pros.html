@@ -15,6 +15,7 @@
       {% if p.plan == 'pro' %}<span class="pill blue">pro</span>{% endif %}</div>
     {% if p.status == 'approved' %}<a href="/pros/{{ p.slug }}" target="_blank">Открыть анкету ↗</a>{% endif %}
   </div>
+  {% if p.kind == 'unlock' and p.status != 'approved' %}<div class="warn" style="margin:8px 0">Вскрытие авто: публикуйте, только если в описании сказано, что мастер проверяет документы владельца (СТС/ПТС и паспорт).</div>{% endif %}
   {% if p.about %}<p style="white-space:pre-line;margin:8px 0">{{ p.about }}</p>{% endif %}
   {% for s in p.services %}<div class="hint">{{ s.title }}{% if s.price %} — {{ s.price }}{% endif %}</div>{% endfor %}
   <div class="hint">Контакты: {{ [p.phone, p.telegram and '@' ~ p.telegram, p.max_link, p.website]|select|join(' · ') }}</div>

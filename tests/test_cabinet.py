@@ -179,3 +179,21 @@ def test_search_and_city_normalization():
     data = ProForm(kind="inspector", name="Диагност", city="казань", services="Толщиномер — 1 000 ₽",
                    phone="89991234567", consent=True).clean()
     assert data["city"] == "Казань" and "толщиномер" in data["search_text"]
+
+
+def test_unlock_kind_in_catalog(settings):
+    from tests.test_admin import P, staff_env, staff_login
+    staff_env(settings)
+    with make_client(settings) as client:
+        owner = login_as(client, max_id=300)
+        form = client.get("/cabinet/pro").text
+        assert "Аварийное вскрытие авто" in form and "unlock-hint" in form
+        client.post("/cabinet/pro", data={**PRO, "kind": "unlock", "name": "Мастер Ключ", "consent": "on"})
+        pid = client.portal.call(client.app.state.pros.by_user, owner.id).id
+        client.cookies.clear()
+        staff_login(client, "help")
+        assert "проверяет документы владельца" in client.get(P + "/pros").text
+        client.post(f"{P}/pros/{pid}", data={"action": "approve"})
+        client.cookies.clear()
+        assert "Мастер Ключ" in client.get("/pros?kind=unlock").text
+        assert "Мастер Ключ" not in client.get("/pros?kind=selector").text
