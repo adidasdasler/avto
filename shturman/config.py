@@ -101,6 +101,15 @@ class Settings(BaseSettings):
                              f"вместо настоящего значения. Скопируйте {name} заново из личного кабинета.")
         return v
 
+    # Тревоги (сотрудникам в MAX/Telegram и в панели)
+    alert_external_spend_rub: float = 50  # баланс у провайдера ушёл больше наших запросов — утечка токена
+    alert_spend_hour_rub: float = 500  # наш расход у провайдера за час
+    alert_spend_day_rub: float = 3000  # наш расход за сутки
+    alert_balance_below_rub: float = 500  # остаток на балансе avtovincod.ru
+    alert_errors_per_hour: int = 30  # ошибок источников за час
+    alert_repeat_hours: float = 3  # повторять ту же тревогу не чаще
+    balance_probe_minutes: int = 30  # узнавать баланс бесплатным тестовым запросом
+
     # Панель администратора
     backup_dir: str = "./backups"  # в Docker — /app/backups (смонтировано в /opt/shturman/backups)
     staff_mfa_hours: int = 12  # сколько часов действует пройденная 2FA в сессии сотрудника

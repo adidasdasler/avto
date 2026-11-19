@@ -164,7 +164,9 @@ async def dashboard(request: Request):
     a = admin_of(request)
     free, total = backups.disk_free(svc(request).settings)
     files = backups.list_backups(svc(request).settings)
+    from .. import alerts
     return render(request, "dashboard.html", staff, stats=await a.stats(), errors=await a.provider_errors(8),
+                  alerts=await alerts.recent(svc(request).db),
                   audit=await a.audit_log(10), last_backup=files[0] if files else None, disk=(free, total),
                   settings=svc(request).settings)
 

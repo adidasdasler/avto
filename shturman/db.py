@@ -215,6 +215,16 @@ class AdminAudit(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
+class SystemAlert(Base):
+    """Тревоги мониторинга (расход и баланс у провайдера, ошибки источников)."""
+    __tablename__ = "system_alerts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(48), index=True)
+    level: Mapped[str] = mapped_column(String(16))  # critical | warning
+    message: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
 class Database:
     def __init__(self, url: str):
         self.engine: AsyncEngine = create_async_engine(url)

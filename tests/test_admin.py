@@ -148,3 +148,18 @@ def test_backup_create_and_restore_sqlite(settings, tmp_path):
         assert any("before-restore" in f for f in files)
         # путь за пределы папки не принимается
         assert client.get("/admin/backups/..%2F..%2Fetc%2Fpasswd").status_code in (404, 303)
+
+
+async def test_backup_file_not_world_readable(settings, tmp_path, db):
+    import os
+    import stat
+    from shturman.admin.backups import create_backup
+    settings.backup_dir = str(tmp_path / "b")
+    settings.database_url = f"sqlite+aiosqlite:///{tmp_path}/x.db"
+    from shturman.db import Database
+    d = Database(settings.database_url)
+    await d.create_all()
+    await d.dispose()
+    b = await create_backup(settings, "perm")
+    mode = stat.S_IMODE(os.stat(tmp_path / "b" / b.name).st_mode)
+    assert mode & 0o007 == 0  # «прочие» не читают и не пишут

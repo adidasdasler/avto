@@ -67,7 +67,7 @@ class AdminService:
             spend = lambda since: select(func.coalesce(func.sum(ProviderLog.charged), 0)).where(  # noqa: E731
                 ProviderLog.created_at >= since)
             last_balance = (await s.execute(select(ProviderLog.balance, ProviderLog.created_at)
-                                            .where(ProviderLog.balance.is_not(None), ProviderLog.test_mode.is_(False))
+                                            .where(ProviderLog.balance.is_not(None))
                                             .order_by(ProviderLog.id.desc()).limit(1))).first()
             return {
                 "users": await scalar(select(func.count()).select_from(User)),
@@ -87,7 +87,8 @@ class AdminService:
                 "spend_30d": float(await scalar(spend(d30))),
                 "provider_errors_24h": await scalar(select(func.count()).select_from(ProviderLog).where(
                     ProviderLog.error.is_not(None), ProviderLog.created_at >= now - timedelta(hours=24))),
-                "provider_balance": (float(last_balance[0]), last_balance[1]) if last_balance else None,
+                "provider_balance": (float(last_balance[0]), last_balance[1])
+                if last_balance and self.settings.provider_mode == "live" else None,
                 "pros_pending": await scalar(select(func.count()).select_from(ProProfile).where(
                     ProProfile.status == "pending")),
                 "pros_live": await scalar(select(func.count()).select_from(ProProfile).where(

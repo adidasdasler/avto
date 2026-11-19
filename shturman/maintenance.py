@@ -13,7 +13,7 @@ from sqlalchemy import delete, select
 
 from .auth import AuthService
 from .config import Settings
-from .db import CacheEntry, Check, Database, Order, Payment, ProviderLog, utcnow
+from .db import CacheEntry, Check, Database, Order, Payment, ProviderLog, SystemAlert, utcnow
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ async def cleanup(db: Database, settings: Settings) -> dict[str, int]:
         out["anon_checks"] = r.rowcount or 0
         r = await s.execute(delete(ProviderLog).where(ProviderLog.created_at < now - timedelta(days=365)))
         out["provider_log"] = r.rowcount or 0
+        await s.execute(delete(SystemAlert).where(SystemAlert.created_at < now - timedelta(days=90)))
         await s.commit()
     await AuthService(db).cleanup()
     log.info("Очистка: %s", out)

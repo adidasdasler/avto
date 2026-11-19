@@ -2,6 +2,7 @@
 {% block title %}Сводка{% endblock %}
 {% block content %}
 <h1>Сводка</h1>
+{% for al in alerts %}<div class="warn" role="alert">{{ '🚨' if al.level == 'critical' else '⚠️' }} <b>{{ al.created_at|dt }}</b> — {{ al.message }}</div>{% endfor %}
 
 <div class="card" style="margin-bottom:14px">
   <h2>Быстрые действия</h2>

@@ -100,6 +100,7 @@ async def create_backup(settings: Settings, label: str = "manual") -> BackupFile
             await asyncio.to_thread(_sqlite_backup, _sqlite_path(settings), tmp)
         else:
             await _pg_dump(settings, tmp)
+        os.chmod(tmp, 0o640)  # в бэкапе данные клиентов — читать только владельцу и группе
         tmp.rename(target)
     finally:
         tmp.unlink(missing_ok=True)

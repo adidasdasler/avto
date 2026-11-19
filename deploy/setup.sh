@@ -64,6 +64,8 @@ else
   git clone -q -b "$BRANCH" "$REPO" "$DIR"
 fi
 chmod +x "$DIR"/deploy/*.sh
+# Папка бэкапов: пишет и приложение (пользователь app, uid 1000), и ночной cron (root)
+mkdir -p "$DIR/backups" && chown 1000:1000 "$DIR/backups" && chmod 750 "$DIR/backups"
 
 if [ ! -f "$DIR/.env" ]; then
   echo "==> Создаю $DIR/.env из шаблона"

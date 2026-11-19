@@ -22,6 +22,7 @@ from ..identifiers import IdentifierError
 from ..provider import Provider, make_provider
 from ..provider.methods import METHODS
 from ..rules import traffic_light
+from .. import alerts
 from ..auth import AuthService
 from ..maintenance import cleanup
 from ..orders import OrderService, make_robokassa
@@ -52,15 +53,23 @@ def payment_warnings(settings: Settings) -> list[str]:
 
 
 async def background(app: FastAPI, interval: float = 15.0) -> None:
-    """Подтверждение оплат с сайта (опрос Robokassa), выполнение веб-заказов, ежедневная очистка."""
-    last_cleanup = 0.0
+    """Подтверждение оплат с сайта (опрос Robokassa), выполнение веб-заказов, тревоги, ежедневная очистка."""
+    last_cleanup = last_alerts = last_probe = 0.0
+    svc = app.state.service
     while True:
         try:
             await app.state.orders.poll_pending()
-            await deliver_web_orders(app.state.service, app.state.orders)
-            if time.monotonic() - last_cleanup > 24 * 3600:
-                await cleanup(app.state.service.db, app.state.service.settings)
-                last_cleanup = time.monotonic()
+            await deliver_web_orders(svc, app.state.orders)
+            now = time.monotonic()
+            if svc.settings.provider_mode == "live" and now - last_probe > svc.settings.balance_probe_minutes * 60:
+                await alerts.probe_balance(svc.db, svc.provider)
+                last_probe = now
+            if now - last_alerts > 300:
+                await alerts.run(svc.db, svc.settings)
+                last_alerts = now
+            if now - last_cleanup > 24 * 3600:
+                await cleanup(svc.db, svc.settings)
+                last_cleanup = now
         except Exception:
             log.exception("background")
         await asyncio.sleep(interval)

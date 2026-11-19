@@ -12,6 +12,9 @@ x-app: &app
   env_file: .env
   restart: unless-stopped
   logging: *logging
+  # Не от root (USER app в Dockerfile), без лишних прав ядра и без повышения привилегий
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
 
 services:
   db:

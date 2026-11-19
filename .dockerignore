@@ -1,0 +1,15 @@
+# В образ попадает только код; секреты, база, бэкапы и служебное — никогда.
+.env
+.env.*
+!.env.example
+.git
+.venv
+__pycache__
+*.pyc
+*.db
+*.sqlite
+backups
+reports_preview
+tests
+.pytest_cache
+deploy
