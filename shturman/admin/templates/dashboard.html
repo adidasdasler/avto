@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Сводка{% endblock %}
+{% block content %}
+<h1>Сводка</h1>
+
+<div class="card" style="margin-bottom:14px">
+  <h2>Быстрые действия</h2>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">
+    <form class="inline" method="post" action="/admin/actions/backup" onsubmit="return confirm('Создать бэкап базы сейчас?')"><button class="btn amber">Создать бэкап <kbd>n b</kbd></button></form>
+    <a class="btn" href="/admin/clients#search">Найти клиента <kbd>/</kbd></a>
+    <form class="inline" method="post" action="/admin/actions/payments"><button class="btn ghost">Проверить оплаты</button></form>
+    <form class="inline" method="post" action="/admin/actions/cleanup" onsubmit="return confirm('Удалить истёкший кэш и старые анонимные проверки?')"><button class="btn ghost">Очистить кэш и старые данные</button></form>
+    {% if staff.is_admin %}<a class="btn ghost" href="/admin/backups">Восстановить из бэкапа…</a>{% endif %}
+  </div>
+  <p class="hint" style="margin:10px 0 0">Последний бэкап: {% if last_backup %}<b>{{ last_backup.created|dt }}</b> ({{ last_backup.name }}){% else %}<b style="color:var(--red)">ещё не было</b>{% endif %} ·
+    свободно на диске: {{ disk[0]|size }} из {{ disk[1]|size }}</p>
+</div>
+
+{% set s = stats %}
+<div class="grid g4" style="margin-bottom:14px">
+  <div class="card stat"><span>Оплачено сегодня</span><b>{{ s.paid_today[1]|rub }}</b><span>{{ s.paid_today[0] }} заказов</span></div>
+  <div class="card stat"><span>За 30 дней</span><b>{{ s.paid_30d[1]|rub }}</b><span>{{ s.paid_30d[0] }} заказов · всего {{ s.paid_total[1]|rub }}</span></div>
+  <div class="card stat"><span>Расход у провайдера</span><b>{{ s.spend_today|rub }}</b><span>сегодня · {{ s.spend_30d|rub }} за 30 дней</span></div>
+  <div class="card stat"><span>Баланс avtovincod.ru</span>
+    {% if s.provider_balance %}<b style="{{ 'color:var(--red)' if s.provider_balance[0] < 500 }}">{{ s.provider_balance[0]|rub }}</b><span>на {{ s.provider_balance[1]|dt }}</span>
+    {% else %}<b>—</b><span>появится после первой платной проверки</span>{% endif %}</div>
+  <div class="card stat"><span>Клиентов</span><b>{{ s.users }}</b><span>+{{ s.users_7d }} за неделю</span></div>
+  <div class="card stat"><span>Проверок сегодня</span><b>{{ s.checks_today }}</b><span>{{ s.checks_7d }} за неделю · полных {{ s.full_7d }}</span></div>
+  <div class="card stat"><span>Ждут оплаты / не доставлены</span><b>{{ s.pending_orders }} / <span style="{{ 'color:var(--red)' if s.undelivered }}">{{ s.undelivered }}</span></b><span><a href="/admin/orders?status=undelivered">не доставленные →</a></span></div>
+  <div class="card stat"><span>Анкеты</span><b>{{ s.pros_pending }} <span class="hint">на модерации</span></b><span>{{ s.pros_live }} опубликовано · <a href="/admin/pros">открыть →</a></span></div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Ошибки источников · {{ s.provider_errors_24h }} за сутки</h2>
+    {% if errors %}<div class="scroll"><table>
+      <tr><th>Когда</th><th>Метод</th><th>Ошибка</th></tr>
+      {% for e in errors %}<tr><td style="white-space:nowrap">{{ e.created_at|dt }}</td><td>{{ e.method }}</td><td class="hint">{{ e.error }}</td></tr>{% endfor %}
+    </table></div>{% else %}<p class="muted">Ошибок нет.</p>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Последние действия сотрудников</h2>
+    {% if audit %}<table>
+      {% for a in audit %}<tr><td style="white-space:nowrap">{{ a.created_at|dt }}</td><td>№{{ a.staff_user_id }}</td><td><b>{{ a.action }}</b> {{ a.target or '' }}</td></tr>{% endfor %}
+    </table><p class="hint"><a href="/admin/staff">Весь журнал →</a></p>{% else %}<p class="muted">Пока пусто.</p>{% endif %}
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px">
+  <h2>Настройки</h2>
+  <p class="hint" style="margin:0">Источник данных: <b>{{ 'avtovincod.ru (боевой)' if settings.provider_mode == 'live' else 'образцы (mock)' }}</b> ·
+    Robokassa: <b>{{ ('тестовый режим' if settings.robokassa_test else 'боевой режим') if settings.robokassa_login else 'не подключена' }}</b> ·
+    бесплатно: {{ settings.free_checks_per_day }}/сутки на аккаунт, {{ settings.free_checks_per_ip_per_day }} на IP, {{ settings.free_checks_global_per_day }} всего</p>
+</div>
+{% endblock %}

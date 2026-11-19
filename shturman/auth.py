@@ -18,6 +18,7 @@ from datetime import timedelta
 
 from sqlalchemy import delete, func, select
 
+from . import totp
 from .db import Database, LoginToken, User, WebSession, utcnow
 
 TOKEN_TTL = timedelta(minutes=10)
@@ -256,14 +257,76 @@ class AuthService:
         s.add(sess)
         return sess.id
 
-    async def session_user(self, sid: str | None) -> User | None:
+    async def session_record(self, sid: str | None) -> tuple[WebSession, User] | None:
         if not sid:
             return None
         async with self.db.session() as s:
             sess = await s.get(WebSession, sid)
             if sess is None or sess.expires_at < utcnow():
                 return None
-            return await s.get(User, sess.user_id)
+            user = await s.get(User, sess.user_id)
+            if user is None or user.blocked_at is not None:
+                return None
+            return sess, user
+
+    async def mark_mfa(self, sid: str) -> None:
+        async with self.db.session() as s:
+            sess = await s.get(WebSession, sid)
+            if sess:
+                sess.mfa_at = utcnow()
+                await s.commit()
+
+    # ---- двухфакторная защита (TOTP) для сотрудников ----
+    async def totp_pending_secret(self, user_id: int) -> str:
+        """Секрет для подключения приложения; пока 2FA не включена, можно перевыпускать."""
+        async with self.db.session() as s:
+            user = await s.get(User, user_id)
+            if user.totp_enabled_at is None and not user.totp_secret:
+                user.totp_secret = totp.new_secret()
+                await s.commit()
+            return user.totp_secret
+
+    async def totp_enable(self, user_id: int, code: str) -> list[str] | None:
+        """Включает 2FA, если код из приложения верный; возвращает резервные коды (показать один раз)."""
+        async with self.db.session() as s:
+            user = await s.get(User, user_id)
+            if not user.totp_secret or user.totp_enabled_at is not None:
+                return None
+            counter = totp.verify(user.totp_secret, code)
+            if counter is None:
+                return None
+            codes = totp.new_recovery_codes()
+            user.totp_enabled_at, user.totp_last_counter = utcnow(), counter
+            user.recovery_codes = [totp.hash_recovery(c) for c in codes]
+            await s.commit()
+            return codes
+
+    async def totp_check(self, user_id: int, code: str, allow_recovery: bool = True) -> str | None:
+        """Второй фактор: код из приложения («totp») или резервный код («recovery»). Каждый — один раз."""
+        async with self.db.session() as s:
+            user = await s.get(User, user_id, with_for_update=True)
+            if user is None or user.totp_enabled_at is None or not user.totp_secret:
+                return None
+            counter = totp.verify(user.totp_secret, code, user.totp_last_counter)
+            if counter is not None:
+                user.totp_last_counter = counter
+                await s.commit()
+                return "totp"
+            rest = totp.use_recovery(code, user.recovery_codes) if allow_recovery else None
+            if rest is not None:
+                user.recovery_codes = rest
+                await s.commit()
+                return "recovery"
+            return None
+
+    async def check_user_password(self, user_id: int, password: str) -> bool:
+        async with self.db.session() as s:
+            user = await s.get(User, user_id)
+        return bool(user and verify_password(password, user.password_hash))
+
+    async def session_user(self, sid: str | None) -> User | None:
+        rec = await self.session_record(sid)
+        return rec[1] if rec else None
 
     async def logout(self, sid: str | None) -> None:
         if not sid:

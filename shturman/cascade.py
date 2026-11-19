@@ -158,6 +158,7 @@ class Cascade:
         async with self.db.session() as s:
             s.add(ProviderLog(check_id=check_id, method=method, charged=resp.charged if resp else 0,
                               test_mode=resp.test_mode if resp else False,
+                              balance=resp.balance if resp and isinstance(resp.balance, (int, float)) else None,
                               error=f"{error}: {error_msg}" if error else None))
             if resp is not None:
                 clean = redact({k: v for k, v in resp.data.items() if k != "billing"})

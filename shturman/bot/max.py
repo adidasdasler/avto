@@ -39,6 +39,10 @@ def dig(d: Any, *path: str) -> Any:
     return d
 
 
+class Blocked(Exception):
+    """Пользователь заблокирован в панели — дальше не обрабатываем."""
+
+
 class Ctx:
     """Куда отвечать: в чат (chat_id) или пользователю (user_id)."""
 
@@ -98,7 +102,11 @@ class MaxBot:
     async def _ctx(self, u: dict[str, Any], chat_id: int | None) -> Ctx:
         uid = int(u["user_id"])
         user = await self.service.max_user(uid, u.get("username") or u.get("name"))
-        return Ctx(user, chat_id, uid)
+        ctx = Ctx(user, chat_id, uid)
+        if user.blocked_at is not None:
+            await self.say(ctx, "Аккаунт заблокирован. Если это ошибка — напишите в поддержку.")
+            raise Blocked()
+        return ctx
 
     # ---------------------------------------------------------------- сценарии
     async def on_start(self, ctx: Ctx, payload: str | None) -> None:
@@ -344,6 +352,8 @@ class MaxBot:
     async def _safe_handle(self, upd: dict[str, Any]) -> None:
         try:
             await self.handle(upd)
+        except Blocked:
+            pass
         except MaxError as e:
             log.error("MAX API: %s", e)
         except Exception:

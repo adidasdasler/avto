@@ -113,10 +113,10 @@ def test_pro_profile_moderation_catalog(settings):
 
         client.cookies.clear()
         assert client.get(f"/pros/{slug}").status_code == 404  # остальным — нет
-        admin = login_as(client, max_id=300)
-        client.app.state.service.settings.admin_user_ids = str(admin.id)
-        assert "Иван Подбор" in client.get("/admin").text
-        client.post(f"/admin/pros/{owner.id and client.portal.call(client.app.state.pros.by_user, owner.id).id}",
+        from tests.test_admin import staff_login
+        staff_login(client, email="mod@vincv.ru", role="support")
+        assert "Иван Подбор" in client.get("/admin/pros").text
+        client.post(f"/admin/pros/{client.portal.call(client.app.state.pros.by_user, owner.id).id}",
                     data={"action": "approve"})
         client.cookies.clear()
 

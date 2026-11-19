@@ -331,6 +331,23 @@ async def fulfil(message: Message, service: CheckService, settings: Settings, us
         await message.answer(summary_text(check), reply_markup=offer_keyboard(check, user, settings))
 
 
+@router.message.outer_middleware()
+@router.callback_query.outer_middleware()
+async def block_middleware(handler, event, data):
+    """Заблокированные в панели пользователи получают отказ, остальное не обрабатывается."""
+    service: CheckService = data["service"]
+    if event.from_user:
+        user = await service.tg_user(event.from_user.id)
+        if user.blocked_at is not None:
+            text = "Аккаунт заблокирован. Если это ошибка — напишите в поддержку."
+            if isinstance(event, CallbackQuery):
+                await event.answer(text, show_alert=True)
+            else:
+                await event.answer(text)
+            return None
+    return await handler(event, data)
+
+
 async def run_polling(service: CheckService, settings: Settings) -> None:
     if not settings.telegram_bot_token:
         raise SystemExit("Не задан TELEGRAM_BOT_TOKEN")

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Подключение 2FA{% endblock %}
+{% block bare %}
+<div class="card" style="padding:28px">
+  <h1>Двухфакторная защита</h1>
+  <p class="muted">Вход в панель возможен только с кодом из приложения-аутентификатора: Яндекс Ключ, Google Authenticator, 1Password, Bitwarden и др.</p>
+  {% if not has_password %}
+    <div class="warn">Сначала задайте пароль для входа: <a href="/cabinet#security">Кабинет → Вход и безопасность</a>. Он понадобится для подключения 2FA.</div>
+  {% else %}
+  <ol style="padding-left:18px">
+    <li>Откройте приложение и добавьте аккаунт по QR-коду.</li>
+    <li>Введите пароль от аккаунта и 6-значный код из приложения.</li>
+  </ol>
+  <div style="background:#fff;border-radius:12px;padding:10px;width:220px;margin:12px auto">{{ qr }}</div>
+  <p class="hint" style="text-align:center">Не сканируется? Введите ключ вручную:<br><code style="font-size:14px;letter-spacing:.06em;word-break:break-all">{{ secret }}</code></p>
+  <form method="post" action="/admin/2fa/setup" style="display:grid;gap:10px;margin-top:14px">
+    <input type="password" name="password" placeholder="Пароль от аккаунта" autocomplete="current-password" required>
+    <input type="text" name="code" placeholder="Код из приложения" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" required>
+    <button class="btn amber">Подключить</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

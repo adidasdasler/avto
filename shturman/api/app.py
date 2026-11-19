@@ -26,6 +26,7 @@ from ..auth import AuthService
 from ..maintenance import cleanup
 from ..orders import OrderService, make_robokassa
 from ..pros import ProService
+from ..admin.routes import router as admin_router
 from ..web.routes import COOKIE, deliver_web_orders, rate_limited, router as web_router
 from ..services import CheckService, LimitExceeded
 
@@ -88,6 +89,7 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         await db.dispose()
 
     app = FastAPI(title=settings.brand_name, lifespan=lifespan)
+    app.include_router(admin_router)
     app.include_router(web_router)
     landing_env = Environment(loader=FileSystemLoader(LANDING_DIR), autoescape=select_autoescape(["html"]))
 

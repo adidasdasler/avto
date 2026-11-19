@@ -101,6 +101,10 @@ class Settings(BaseSettings):
                              f"вместо настоящего значения. Скопируйте {name} заново из личного кабинета.")
         return v
 
+    # Панель администратора
+    backup_dir: str = "./backups"  # в Docker — /app/backups (смонтировано в /opt/shturman/backups)
+    staff_mfa_hours: int = 12  # сколько часов действует пройденная 2FA в сессии сотрудника
+
     @property
     def admins(self) -> set[int]:
         return {int(x) for x in self.admin_user_ids.replace(" ", "").split(",") if x.isdigit()}

@@ -60,7 +60,9 @@ async def require_user(request: Request) -> User:
 
 
 def is_admin(request: Request, user: User | None) -> bool:
-    return bool(user and user.id in svc(request).settings.admins)
+    """Сотрудник (поддержка или администратор) — для ссылки «Панель» и просмотра неопубликованных анкет."""
+    from ..admin.service import effective_role
+    return effective_role(user, svc(request).settings) is not None
 
 
 async def form_data(request: Request) -> dict[str, str]:
@@ -103,8 +105,9 @@ def messenger_links(request: Request, payload: str) -> list[tuple[str, str]]:
     return links
 
 
-def rate_limited(request: Request, bucket: str, limit: int = 10, window: float = 900) -> bool:
-    """Не больше limit попыток за window секунд с одного IP (вход, регистрация, восстановление)."""
+def rate_limited(request: Request, bucket: str, limit: int = 10, window: float = 900, count: bool = True) -> bool:
+    """Не больше limit попыток за window секунд с одного IP (вход, регистрация, восстановление).
+    count=False — только проверить, не засчитывая попытку (для 2FA считаем лишь неудачные коды)."""
     s = svc(request).settings
     ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() if s.trust_proxy_headers else ""
     key = f"{bucket}:{ip or (request.client.host if request.client else '-')}"
@@ -116,7 +119,8 @@ def rate_limited(request: Request, bucket: str, limit: int = 10, window: float =
         q.popleft()
     if len(q) >= limit:
         return True
-    q.append(now)
+    if count:
+        q.append(now)
     return False
 
 
@@ -162,6 +166,8 @@ async def login_password(request: Request):
     user = await auth_of(request).check_password(f.get("email", ""), f.get("password", ""))
     if user is None:
         return await login_page(request, "Неверная почта или пароль.", f.get("email", ""), 400)
+    if user.blocked_at is not None:
+        return await login_page(request, "Аккаунт заблокирован. Напишите в поддержку.", f.get("email", ""), 403)
     sid = await auth_of(request).create_session(user.id)
     return set_session(RedirectResponse(safe_next(f.get("next")), status_code=303), request, sid)
 
@@ -545,34 +551,3 @@ async def sitemap(request: Request) -> Response:
     urls = "".join(f"<url><loc>{site_url(request, p)}</loc></url>" for p in paths)
     xml = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>'
     return Response(xml, media_type="application/xml")
-
-
-# ---------------------------------------------------------------- админка
-@router.get("/admin", response_class=HTMLResponse)
-async def admin(request: Request):
-    user = await require_user(request)
-    if not is_admin(request, user):
-        raise HTTPException(404)
-    s = svc(request)
-    async with s.db.session() as db:
-        totals = {
-            "users": (await db.execute(select(func.count()).select_from(User))).scalar_one(),
-            "checks": (await db.execute(select(func.count()).select_from(Check))).scalar_one(),
-            "paid": (await db.execute(select(func.count(), func.coalesce(func.sum(Order.amount_rub), 0))
-                                      .where(Order.status == "paid"))).one(),
-            "pros": (await db.execute(select(func.count()).select_from(ProProfile)
-                                      .where(ProProfile.status == "approved"))).scalar_one(),
-        }
-    from ..api.app import payment_warnings
-    return render(request, "admin.html", user=user, pending=await pros_of(request).pending(), totals=totals,
-                  warnings=payment_warnings(s.settings))
-
-
-@router.post("/admin/pros/{profile_id}")
-async def admin_moderate(request: Request, profile_id: int):
-    user = await require_user(request)
-    if not is_admin(request, user):
-        raise HTTPException(404)
-    f = await form_data(request)
-    await pros_of(request).moderate(profile_id, f.get("action") == "approve", f.get("reason"))
-    return back("/admin", "Готово")

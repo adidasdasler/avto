@@ -34,6 +34,14 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(254), unique=True, index=True)
     password_hash: Mapped[str | None] = mapped_column(String(200))
     yandex_id: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
+    # Сотрудники: support — поддержка, admin — администратор. Вход в панель только с 2FA (TOTP).
+    staff_role: Mapped[str | None] = mapped_column(String(16), index=True)
+    totp_secret: Mapped[str | None] = mapped_column(String(64))
+    totp_enabled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    totp_last_counter: Mapped[int | None] = mapped_column(BigInteger)  # защита от повторного кода
+    recovery_codes: Mapped[list[Any] | None] = mapped_column()  # хеши одноразовых резервных кодов
+    blocked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    blocked_reason: Mapped[str | None] = mapped_column(String(300))
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime)
     credits: Mapped[int] = mapped_column(Integer, default=0)  # отчёты уровня «Досье» из пакетов
     unlimited_until: Mapped[datetime | None] = mapped_column(DateTime)
@@ -109,6 +117,7 @@ class WebSession(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    mfa_at: Mapped[datetime | None] = mapped_column(DateTime)  # когда в этой сессии пройдена 2FA
 
 
 class ProProfile(Base):
@@ -168,6 +177,7 @@ class ProviderLog(Base):
     method: Mapped[str] = mapped_column(String(32))
     charged: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     test_mode: Mapped[bool] = mapped_column(default=False)
+    balance: Mapped[float | None] = mapped_column(Numeric(12, 2))  # баланс у провайдера после запроса
     error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
@@ -191,6 +201,18 @@ def _add_missing_columns(conn) -> None:
         for idx in table.indexes:
             if {c.name for c in idx.columns} & added:
                 idx.create(conn, checkfirst=True)
+
+
+class AdminAudit(Base):
+    """Журнал действий сотрудников в панели."""
+    __tablename__ = "admin_audit"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    staff_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    action: Mapped[str] = mapped_column(String(48))
+    target: Mapped[str | None] = mapped_column(String(120))
+    details: Mapped[dict[str, Any] | None] = mapped_column()
+    ip: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class Database:

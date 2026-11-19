@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Анкеты{% endblock %}
+{% block content %}
+<h1>Анкеты специалистов</h1>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+  {% for k, t in [('pending', 'На модерации'), ('approved', 'Опубликованы'), ('rejected', 'Отклонены'), ('hidden', 'Скрыты'), ('', 'Все')] %}
+  <a class="btn sm {{ '' if status == k else 'ghost' }}" href="/admin/pros?status={{ k }}">{{ t }}</a>{% endfor %}
+</div>
+{% for p in items %}
+<div class="card" style="margin-bottom:12px">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <div><b>{{ p.name }}</b> · {{ kinds[p.kind] }} · {{ p.city }} · <a href="/admin/clients/{{ p.user_id }}">клиент №{{ p.user_id }}</a>
+      <span class="pill {{ {'approved':'green','pending':'amber','rejected':'red'}.get(p.status, 'grey') }}">{{ p.status }}</span>
+      {% if p.featured_until and p.featured_until > now %}<span class="pill blue">в топе до {{ p.featured_until|dt }}</span>{% endif %}
+      {% if p.plan == 'pro' %}<span class="pill blue">pro</span>{% endif %}</div>
+    <a href="/pros/{{ p.slug }}" target="_blank">Открыть анкету ↗</a>
+  </div>
+  {% if p.about %}<p style="white-space:pre-line;margin:8px 0">{{ p.about }}</p>{% endif %}
+  {% for s in p.services %}<div class="hint">{{ s.title }}{% if s.price %} — {{ s.price }}{% endif %}</div>{% endfor %}
+  <div class="hint">Контакты: {{ [p.phone, p.telegram and '@' ~ p.telegram, p.max_link, p.website]|select|join(' · ') }}</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+    {% if p.status != 'approved' %}<form class="inline" method="post" action="/admin/pros/{{ p.id }}"><input type="hidden" name="back" value="{{ status }}"><button class="btn" name="action" value="approve">Опубликовать</button></form>{% endif %}
+    {% if p.status != 'rejected' %}<form class="inline" method="post" action="/admin/pros/{{ p.id }}" style="display:flex;gap:6px"><input type="hidden" name="back" value="{{ status }}">
+      <input type="text" name="reason" placeholder="Причина отказа"><button class="btn danger" name="action" value="reject">Отклонить</button></form>{% endif %}
+    {% if p.status == 'approved' %}<form class="inline" method="post" action="/admin/pros/{{ p.id }}" style="display:flex;gap:6px"><input type="hidden" name="back" value="{{ status }}">
+      <select name="days"><option value="0">Без поднятия</option><option value="7">Поднять на 7 дней</option><option value="30">на 30 дней</option><option value="90">на 90 дней</option></select>
+      <select name="plan"><option value="free" {{ 'selected' if p.plan == 'free' }}>free</option><option value="pro" {{ 'selected' if p.plan == 'pro' }}>pro</option></select>
+      <button class="btn ghost" name="action" value="feature">Сохранить продвижение</button></form>{% endif %}
+  </div>
+</div>
+{% else %}<p class="muted">Анкет нет.</p>{% endfor %}
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Подтверждение входа{% endblock %}
+{% block bare %}
+<div class="card" style="padding:28px">
+  <h1>Код подтверждения</h1>
+  <p class="muted">Введите 6-значный код из приложения-аутентификатора. Нет телефона под рукой — подойдёт резервный код.</p>
+  <form method="post" action="/admin/2fa" style="display:grid;gap:10px">
+    <input type="hidden" name="next" value="{{ next }}">
+    <input type="text" name="code" placeholder="123456 или XXXX-XXXX" autocomplete="one-time-code" autofocus required>
+    <button class="btn amber">Войти в панель</button>
+  </form>
+</div>
+{% endblock %}

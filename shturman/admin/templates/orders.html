@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Заказы{% endblock %}
+{% block content %}
+<h1>Заказы</h1>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+  {% for k, t in [('', 'Все'), ('pending', 'Ждут оплаты'), ('paid', 'Оплачены'), ('undelivered', 'Не доставлены')] %}
+  <a class="btn sm {{ '' if status == k else 'ghost' }}" href="/admin/orders?status={{ k }}">{{ t }}</a>{% endfor %}
+  <form class="inline" method="post" action="/admin/actions/payments" style="margin-left:auto"><button class="btn sm amber">Проверить оплаты в Robokassa</button></form>
+</div>
+<div class="card scroll">
+  <table>
+    <tr><th>№ (InvId)</th><th>Создан</th><th>Клиент</th><th>Тариф</th><th>Сумма</th><th>Где</th><th>Статус</th><th></th></tr>
+    {% for o, u in rows %}
+    <tr><td>{{ o.id }}</td><td style="white-space:nowrap">{{ o.created_at|dt }}</td>
+      <td><a href="/admin/clients/{{ o.user_id }}">№{{ o.user_id }}</a> <span class="hint">{{ u.email if u and u.email else '' }}</span></td>
+      <td>{{ o.product }}</td><td>{{ o.amount_rub|rub }}</td><td class="hint">{{ o.platform }}</td>
+      <td>{% if o.status == 'paid' %}<span class="pill green">оплачен {{ o.paid_at|dt }}</span>{% if not o.delivered_at %} <span class="pill red">не доставлен</span>{% endif %}
+          {% elif o.status == 'pending' %}<span class="pill grey">ждёт оплаты</span>{% else %}{{ o.status }}{% endif %}</td>
+      <td>{% if o.status == 'pending' %}<form class="inline" method="post" action="/admin/orders/{{ o.id }}/refresh"><button class="btn sm ghost">Проверить</button></form>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="8" class="muted">Заказов нет.</td></tr>{% endfor %}
+  </table>
+</div>
+<p class="hint">«Проверить» спрашивает статус счёта у Robokassa. Оплаченные, но не доставленные заказы бот и сайт доставляют сами в течение минуты; если висят дольше — смотрите логи.</p>
+{% endblock %}

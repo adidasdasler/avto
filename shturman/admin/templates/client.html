@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Клиент №{{ user.id }}{% endblock %}
+{% block content %}
+<a href="/admin/clients" class="hint">← Клиенты</a>
+<h1 style="margin-top:6px">Клиент №{{ user.id }} {% if user.blocked_at %}<span class="pill red">заблокирован</span>{% endif %}
+  {% if role %}<span class="pill blue">{{ roles[role] }}</span>{% endif %}</h1>
+
+<div class="grid g3" style="margin-bottom:14px">
+  <div class="card">
+    <h2>Данные</h2>
+    <table>
+      <tr><td class="muted">Почта</td><td>{{ user.email or '—' }} {% if user.email %}{% if user.email_verified_at %}<span class="pill green">подтверждена</span>{% else %}<span class="pill amber">не подтверждена</span>{% endif %}{% endif %}</td></tr>
+      <tr><td class="muted">MAX</td><td>{{ user.max_id or '—' }}</td></tr>
+      <tr><td class="muted">Telegram</td><td>{{ user.tg_id or '—' }}{% if user.username %} · {{ user.username }}{% endif %}</td></tr>
+      <tr><td class="muted">Яндекс ID</td><td>{{ 'привязан' if user.yandex_id else '—' }}</td></tr>
+      <tr><td class="muted">Тип</td><td>{{ 'подборщик' if user.role == 'picker' else 'покупатель' }}{% if user.legal_status %} · {{ user.legal_status }}{% endif %}</td></tr>
+      <tr><td class="muted">Регистрация</td><td>{{ user.created_at|dt }}</td></tr>
+      <tr><td class="muted">Активных сессий</td><td>{{ sessions }}</td></tr>
+      {% if role %}<tr><td class="muted">2FA</td><td>{{ 'включена ' ~ (user.totp_enabled_at|dt) if user.totp_enabled_at else 'не подключена' }}</td></tr>{% endif %}
+      {% if user.blocked_at %}<tr><td class="muted">Блокировка</td><td>{{ user.blocked_at|dt }}: {{ user.blocked_reason or '—' }}</td></tr>{% endif %}
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Пакет</h2>
+    <p style="font-size:28px;font-weight:800;margin:0">{{ user.credits }} <span class="hint" style="font-weight:400">отчётов «Досье»</span></p>
+    {% if user.unlimited_until %}<p class="hint">Безлимит (старый тариф) {{ 'действует до' if user.unlimited_until > now else 'закончился' }} {{ user.unlimited_until|dt }}</p>{% endif %}
+    <form method="post" action="/admin/clients/{{ user.id }}/credits" style="display:grid;gap:8px;margin-top:10px">
+      <div style="display:flex;gap:8px"><input type="number" name="delta" placeholder="+5 или -2" required style="width:120px">
+        <input type="text" name="reason" placeholder="Причина (видна в журнале)" required style="flex:1"></div>
+      <button class="btn">Начислить / списать</button>
+    </form>
+    <p class="hint">Например, компенсация за отчёт, который не собрался.</p>
+  </div>
+
+  <div class="card">
+    <h2>Управление</h2>
+    {% if user.id != staff.user.id %}
+    <form method="post" action="/admin/clients/{{ user.id }}/block" style="display:grid;gap:8px"
+          onsubmit="return confirm('{{ 'Разблокировать' if user.blocked_at else 'Заблокировать' }} клиента?')">
+      <input type="hidden" name="block" value="{{ '0' if user.blocked_at else '1' }}">
+      {% if not user.blocked_at %}<input type="text" name="reason" placeholder="Причина блокировки" required>{% endif %}
+      <button class="btn {{ '' if user.blocked_at else 'danger' }}">{{ 'Разблокировать' if user.blocked_at else 'Заблокировать' }}</button>
+    </form>
+    {% endif %}
+    {% if staff.is_admin %}
+    <form method="post" action="/admin/clients/{{ user.id }}/role" style="display:flex;gap:8px;margin-top:14px">
+      <select name="role"><option value="">Не сотрудник</option>{% for k, t in roles.items() %}<option value="{{ k }}" {{ 'selected' if user.staff_role == k }}>{{ t }}</option>{% endfor %}</select>
+      <button class="btn ghost">Сохранить роль</button>
+    </form>
+    {% if role and user.totp_enabled_at %}
+    <form method="post" action="/admin/clients/{{ user.id }}/reset-2fa" style="margin-top:10px" onsubmit="return confirm('Сбросить 2FA сотрудника? Он подключит её заново при входе.')">
+      <button class="btn sm ghost">Сбросить 2FA (потерян телефон)</button></form>
+    {% endif %}
+    {% endif %}
+    {% if profile %}<p style="margin-top:14px">Анкета: <a href="/pros/{{ profile.slug }}" target="_blank">{{ profile.name }}</a> · {{ profile.status }}</p>{% endif %}
+  </div>
+</div>
+
+<div class="card scroll" style="margin-bottom:14px">
+  <h2>Проверки · {{ checks|length }}</h2>
+  <table>
+    <tr><th>Дата</th><th>Автомобиль</th><th>Запрос</th><th>Тариф</th><th>Сигнал</th><th>Источник</th><th></th></tr>
+    {% for c in checks %}{% set L = lights[c.id] %}
+    <tr><td style="white-space:nowrap">{{ c.created_at|dt }}</td><td>{{ (c.vehicle or {}).get('title') or '—' }}</td>
+      <td class="hint">{{ c.vin or c.query }}</td><td>{{ tiers[c.tier] }}</td>
+      <td><span class="pill {{ L.color }}">{{ L.score ~ '/100' if L.score is not none else 'нет данных' }}</span></td>
+      <td class="hint">{{ c.source }}</td>
+      <td><a class="btn sm ghost" href="/r/{{ c.id }}" target="_blank">Отчёт</a></td></tr>
+    {% else %}<tr><td colspan="7" class="muted">Проверок нет.</td></tr>{% endfor %}
+  </table>
+</div>
+
+<div class="grid g2">
+  <div class="card scroll">
+    <h2>Заказы</h2>
+    <table>
+      <tr><th>№</th><th>Дата</th><th>Тариф</th><th>Сумма</th><th>Статус</th></tr>
+      {% for o in orders %}<tr><td>{{ o.id }}</td><td style="white-space:nowrap">{{ o.created_at|dt }}</td><td>{{ o.product }}</td><td>{{ o.amount_rub|rub }}</td>
+        <td>{% if o.status == 'paid' %}<span class="pill green">оплачен</span>{% if not o.delivered_at %} <span class="pill red">не доставлен</span>{% endif %}{% elif o.status == 'pending' %}<span class="pill grey">ждёт оплаты</span>{% else %}{{ o.status }}{% endif %}</td></tr>
+      {% else %}<tr><td colspan="5" class="muted">Нет.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card scroll">
+    <h2>Платежи</h2>
+    <table>
+      <tr><th>Дата</th><th>Тариф</th><th>Сумма</th><th>Провайдер</th></tr>
+      {% for p in payments %}<tr><td style="white-space:nowrap">{{ p.created_at|dt }}</td><td>{{ p.product }}</td><td>{{ p.amount_rub|rub }}</td><td class="hint">{{ p.provider }}</td></tr>
+      {% else %}<tr><td colspan="4" class="muted">Нет.</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}
